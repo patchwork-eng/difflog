@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Difflog — Auto-generate changelogs from your git log</title>
+  <meta name="description" content="Difflog reads your commits since the last release, hands them to an LLM, and writes a CHANGELOG.md you'd actually want to read.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --bg-2:      #161b22;
+      --bg-3:      #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --green:     #238636;
+      --green-2:   #2ea043;
+      --green-light:#3fb950;
+      --code-bg:   #0d1117;
+      --radius:    8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--green-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section { padding: 80px 0; }
+    section + section { border-top: 1px solid var(--border); }
+
+    /* ── Nav ── */
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      position: sticky;
+      top: 0;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+    nav .inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green-light);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text-muted); }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 100px 0 80px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      color: var(--text);
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--green-light);
+    }
+    .hero p {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--text-muted);
+      max-width: 620px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green);
+      color: #fff;
+      font-weight: 600;
+      font-size: 16px;
+      padding: 12px 24px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--green-2); text-decoration: none; }
+    .btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+    /* ── Section headings ── */
+    .section-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: clamp(22px, 3.5vw, 32px);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Problem section ── */
+    .problem p {
+      color: var(--text-muted);
+      font-size: 17px;
+      line-height: 1.8;
+      margin-bottom: 16px;
+    }
+    .problem p:last-child { margin-bottom: 0; }
+    .problem p strong { color: var(--text); }
+    .inline-code {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--green-light);
+    }
+
+    /* ── How it works ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .step {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+    }
+    .step-num {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--green-light);
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+    .step h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .step p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    /* ── Code blocks ── */
+    .code-wrap {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-top: 32px;
+    }
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-3);
+    }
+    .code-header span {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--green-light); color: var(--green-light); }
+    .copy-btn.copied { color: var(--green-light); border-color: var(--green-light); }
+
+    pre {
+      margin: 0;
+      padding: 20px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: #adbac7;
+      tab-size: 2;
+    }
+
+    /* YAML syntax colors */
+    .y-comment { color: #6e7681; }
+    .y-key     { color: #79c0ff; }
+    .y-string  { color: #a5d6ff; }
+    .y-value   { color: #3fb950; }
+    .y-tag     { color: #d2a8ff; }
+    .y-var     { color: #ffa657; }
+    .y-punct   { color: #8b949e; }
+
+    /* Markdown colors */
+    .m-h2      { color: #79c0ff; font-weight: bold; }
+    .m-h3      { color: #3fb950; font-weight: bold; }
+    .m-li      { color: #adbac7; }
+    .m-bullet  { color: #6e7681; }
+    .m-code    { color: #ffa657; }
+    .m-date    { color: #6e7681; }
+
+    /* ── Pricing ── */
+    .plans {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+    .plan {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .plan.featured {
+      border-color: var(--green);
+      position: relative;
+    }
+    .plan.featured::before {
+      content: "Most popular";
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--green);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .plan-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .plan-price {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--text);
+    }
+    .plan-price sup { font-size: 18px; vertical-align: top; margin-top: 6px; }
+    .plan-price sub { font-size: 14px; font-weight: 400; color: var(--text-muted); }
+    .plan-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .plan-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .plan-features li {
+      font-size: 14px;
+      color: var(--text-muted);
+      padding-left: 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .plan-features li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green-light);
+      font-weight: 700;
+    }
+    .plan-features li strong { color: var(--text); }
+
+    /* ── Install ── */
+    .install-intro {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    .install-close {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-top: 24px;
+    }
+    .install-close strong { color: var(--text); }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 0;
+      text-align: center;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    footer .tagline {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+    footer .sub {
+      font-size: 13px;
+      margin-top: 16px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      section { padding: 60px 0; }
+      .hero { padding: 72px 0 60px; }
+      .steps, .plans { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="inner">
+    <span class="logo">diff<span>log</span></span>
+  </div>
+</nav>
+
+<!-- ══ HERO ══ -->
+<div class="hero">
+  <div class="container">
+    <h1>Your git log has the changelog.<br><em>You just can't read it yet.</em></h1>
+    <p>Difflog reads your commits since the last release, hands them to an LLM, and writes a <code class="inline-code">CHANGELOG.md</code> you'd actually want to read. No conventions. No templates. Just push a tag and it's done.</p>
+    <a class="btn" href="https://github.com/patchwork-eng/difflog">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Add to your repo →
+    </a>
+  </div>
+</div>
+
+<!-- ══ THE PROBLEM ══ -->
+<section class="problem">
+  <div class="container">
+    <div class="section-label">// the problem</div>
+    <h2>Every release ends the same way.</h2>
+    <p>You're staring at <code class="inline-code">git log --oneline v1.2.0..HEAD</code> and there are 47 commits that say things like "fix stuff," "wip," "temp," and "ok now it works." You have no idea what to write. You're tired. You just want to ship. So you write <strong>"Bug fixes and performance improvements"</strong> and move on — and you know it, and your users know it, and nobody says anything, and that's somehow worse.</p>
+    <p>Or you skip the changelog entirely. Again.</p>
+    <p><strong>Difflog fixes the part you've been skipping for three years.</strong></p>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ══ -->
+<section>
+  <div class="container">
+    <div class="section-label">// how it works</div>
+    <h2>Three steps. One tag push.</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">STEP 01</div>
+        <h3>Tag your release.</h3>
+        <p>Push a version tag (<code class="inline-code">v1.2.0</code>). That's the trigger.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">STEP 02</div>
+        <h3>Difflog reads your commits.</h3>
+        <p>The GitHub Action collects everything since your last tag and sends it to an LLM with the right context.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">STEP 03</div>
+        <h3>Get a real changelog.</h3>
+        <p>A clean, grouped, human-readable <code class="inline-code">CHANGELOG.md</code> gets committed back to your repo. Done.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ EXAMPLE OUTPUT ══ -->
+<section>
+  <div class="container">
+    <div class="section-label">// example output</div>
+    <h2>Here's what it actually looks like.</h2>
+    <p style="color:var(--text-muted); margin-bottom: 8px;">No bullet soup. No raw commit hashes. No "chore: update deps (again)." Just what changed, in plain English, organized so someone can actually read it.</p>
+
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>CHANGELOG.md</span>
+      </div>
+      <pre><span class="m-h2">## [1.4.0]</span> <span class="m-date">— 2026-03-14</span>
+
+<span class="m-h3">### What's new</span>
+<span class="m-bullet">-</span> <span class="m-li">Added support for monorepos: you can now scope Difflog to a subdirectory with <span class="m-code">`working_directory`</span></span>
+<span class="m-bullet">-</span> <span class="m-li">Changelog entries are now grouped by type (features, fixes, maintenance) automatically</span>
+
+<span class="m-h3">### Fixed</span>
+<span class="m-bullet">-</span> <span class="m-li">Duplicate entries were appearing when commits spanned a merge and its squash — fixed</span>
+<span class="m-bullet">-</span> <span class="m-li">The action was failing silently on repos with no prior tags; it now exits with a helpful message</span>
+
+<span class="m-h3">### Under the hood</span>
+<span class="m-bullet">-</span> <span class="m-li">Switched LLM call to streaming to reduce timeout risk on large commit ranges</span>
+<span class="m-bullet">-</span> <span class="m-li">Reduced default token budget by 30% without affecting output quality</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRICING ══ -->
+<section>
+  <div class="container">
+    <div class="section-label">// pricing</div>
+    <h2>Simple, honest pricing.</h2>
+
+    <div class="plans">
+      <!-- Free -->
+      <div class="plan">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0<sub>/mo</sub></div>
+        <div class="plan-desc">Public repos</div>
+        <ul class="plan-features">
+          <li>Unlimited changelog runs on public repositories</li>
+          <li>Full LLM-generated output</li>
+          <li>Works out of the box with a single YAML block</li>
+          <li>No credit card required</li>
+        </ul>
+      </div>
+
+      <!-- Indie (featured) -->
+      <div class="plan featured">
+        <div class="plan-name">Indie</div>
+        <div class="plan-price"><sup>$</sup>9<sub>/mo</sub></div>
+        <div class="plan-desc">Solo devs, freelancers, and side projects that actually ship</div>
+        <ul class="plan-features">
+          <li>Everything in Free</li>
+          <li><strong>Private repository support</strong></li>
+          <li>Up to 5 repos</li>
+        </ul>
+      </div>
+
+      <!-- Teams -->
+      <div class="plan">
+        <div class="plan-name">Teams</div>
+        <div class="plan-price"><sup>$</sup>29<sub>/mo</sub></div>
+        <div class="plan-desc">Small teams tired of the "did you update the changelog?" checklist item</div>
+        <ul class="plan-features">
+          <li>Everything in Indie</li>
+          <li><strong>Unlimited private repos</strong></li>
+          <li>Team seat management</li>
+          <li>Priority support (real replies, not a bot quoting the docs at you)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ INSTALL ══ -->
+<section>
+  <div class="container">
+    <div class="section-label">// install</div>
+    <h2>One file. That's it.</h2>
+    <p class="install-intro">Drop this in <code class="inline-code">.github/workflows/changelog.yml</code>:</p>
+
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>.github/workflows/changelog.yml</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre id="install-code"><span class="y-key">name</span><span class="y-punct">:</span> <span class="y-string">Generate Changelog</span>
+
+<span class="y-key">on</span><span class="y-punct">:</span>
+  <span class="y-key">push</span><span class="y-punct">:</span>
+    <span class="y-key">tags</span><span class="y-punct">:</span>
+      <span class="y-punct">-</span> <span class="y-value">'v*'</span>
+
+<span class="y-key">jobs</span><span class="y-punct">:</span>
+  <span class="y-key">changelog</span><span class="y-punct">:</span>
+    <span class="y-key">runs-on</span><span class="y-punct">:</span> <span class="y-string">ubuntu-latest</span>
+    <span class="y-key">steps</span><span class="y-punct">:</span>
+      <span class="y-punct">-</span> <span class="y-key">uses</span><span class="y-punct">:</span> <span class="y-value">actions/checkout@v4</span>
+        <span class="y-key">with</span><span class="y-punct">:</span>
+          <span class="y-key">fetch-depth</span><span class="y-punct">:</span> <span class="y-value">0</span>
+
+      <span class="y-punct">-</span> <span class="y-key">uses</span><span class="y-punct">:</span> <span class="y-value">patchwork-eng/difflog@v1</span>
+        <span class="y-key">with</span><span class="y-punct">:</span>
+          <span class="y-key">github_token</span><span class="y-punct">:</span> <span class="y-var">${{ secrets.GITHUB_TOKEN }}</span>
+          <span class="y-key">openai_api_key</span><span class="y-punct">:</span> <span class="y-var">${{ secrets.OPENAI_API_KEY }}</span></pre>
+    </div>
+
+    <p class="install-close">That's it. <strong>Push a tag. Get a changelog.</strong></p>
+  </div>
+</section>
+
+<!-- ══ FOOTER ══ -->
+<footer>
+  <div class="container">
+    <p class="tagline">You've been meaning to write that changelog since v0.9.0.</p>
+    <p>
+      <a class="btn" href="https://github.com/patchwork-eng/difflog" style="display:inline-flex; font-size:14px; padding:10px 20px;">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub →
+      </a>
+    </p>
+    <p class="sub"><a href="https://github.com/patchwork-eng/difflog">difflog.io</a> — built by <a href="https://github.com/patchwork-eng">patchwork-eng</a></p>
+  </div>
+</footer>
+
+<script>
+  function copyCode(btn) {
+    const pre = btn.closest('.code-wrap').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
