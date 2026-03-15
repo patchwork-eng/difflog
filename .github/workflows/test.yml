@@ -1,0 +1,27 @@
+name: Test Difflog
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history so we can compare against tags
+
+      - name: Run Difflog
+        uses: ./
+        with:
+          openai_key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-4o-mini
+          max_commits: 50
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

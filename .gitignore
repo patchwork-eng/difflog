@@ -1,0 +1,2 @@
+node_modules/
+# dist/ is committed after build — do not ignore

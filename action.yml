@@ -1,0 +1,28 @@
+name: Difflog
+description: "Generate a human-readable changelog from your git commits"
+author: "patchwork-eng"
+
+branding:
+  icon: "file-text"
+  color: "blue"
+
+inputs:
+  openai_key:
+    description: "OpenAI API key. Required for private repos. Public repos may use the shared key."
+    required: true
+  model:
+    description: "OpenAI model to use for changelog generation"
+    required: false
+    default: "gpt-4o-mini"
+  max_commits:
+    description: "Maximum number of commits to include in the changelog prompt"
+    required: false
+    default: "50"
+
+outputs:
+  changelog_path:
+    description: "Path to the generated CHANGELOG.md file"
+
+runs:
+  using: node20
+  main: dist/index.js
