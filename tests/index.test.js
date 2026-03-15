@@ -12,13 +12,68 @@ jest.mock('@actions/core', () => ({
   setOutput: jest.fn(),
 }));
 
+// Mock @actions/github
+jest.mock('@actions/github', () => ({
+  context: {
+    repo: { owner: 'test-owner', repo: 'test-repo' },
+    sha: 'abc1234567890abcdef',
+  },
+}));
+
+// Mock @octokit/rest — expose internals via __mockRepos for test access
+jest.mock('@octokit/rest', () => {
+  const repos = {
+    get: jest.fn(),
+    listReleases: jest.fn(),
+    compareCommits: jest.fn(),
+    listCommits: jest.fn(),
+  };
+  return {
+    Octokit: jest.fn(() => ({ repos })),
+    __mockRepos: repos,
+  };
+});
+
+// Mock openai — expose create fn via __mockCreate
+jest.mock('openai', () => {
+  const create = jest.fn();
+  return {
+    default: jest.fn(() => ({ chat: { completions: { create } } })),
+    __mockCreate: create,
+  };
+});
+
+// Mock fs (selective — keep real fs for everything except our target methods)
+jest.mock('fs', () => {
+  const realFs = jest.requireActual('fs');
+  return {
+    ...realFs,
+    existsSync: jest.fn(),
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn(),
+    copyFileSync: jest.fn(),
+    unlinkSync: jest.fn(),
+  };
+});
+
+// Mock child_process
+jest.mock('child_process', () => ({
+  execSync: jest.fn(),
+}));
+
 const core = require('@actions/core');
+const fs = require('fs');
+const { execSync } = require('child_process');
+const { __mockRepos: mockRepos } = require('@octokit/rest');
+const { __mockCreate: mockOpenAICreate } = require('openai');
+
 const {
   filterCommits,
   bumpVersion,
   buildPrompt,
   prependChangelog,
   callOpenAIWithRetry,
+  run,
 } = require('../src/index');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,6 +90,7 @@ function makeCommit(message, author = 'Alice', sha = 'abc1234def56789') {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  process.env.GITHUB_TOKEN = 'test-token';
 });
 
 // ─── filterCommits ────────────────────────────────────────────────────────────
@@ -366,5 +422,177 @@ describe('callOpenAIWithRetry', () => {
     expect(core.warning).toHaveBeenCalledTimes(2);
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('attempt 1'));
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('attempt 2'));
+  });
+});
+
+// ─── run() — Integration tests ────────────────────────────────────────────────
+
+describe('run()', () => {
+  // Shared commit list returned by the API
+  const fakeCommits = [
+    makeCommit('feat: shiny new thing', 'Alice', 'aabbccddeeff001'),
+    makeCommit('fix: stop crashing on null', 'Bob', '1122334455667788'),
+  ];
+
+  // Default happy-path input mock
+  function setupInputs({ licenseKey = '' } = {}) {
+    core.getInput.mockImplementation((name) => {
+      if (name === 'openai_key') return 'sk-test-key';
+      if (name === 'model') return 'gpt-4o-mini';
+      if (name === 'max_commits') return '50';
+      if (name === 'license_key') return licenseKey;
+      return '';
+    });
+  }
+
+  // Default: public repo
+  function setupPublicRepo() {
+    mockRepos.get.mockResolvedValue({ data: { private: false } });
+  }
+
+  // Default: private repo
+  function setupPrivateRepo() {
+    mockRepos.get.mockResolvedValue({ data: { private: true } });
+  }
+
+  // Default: no prior releases, use listCommits fallback
+  function setupNoReleases() {
+    mockRepos.listReleases.mockResolvedValue({ data: [] });
+    mockRepos.listCommits.mockResolvedValue({ data: fakeCommits });
+  }
+
+  // Default: OpenAI returns content
+  function setupOpenAISuccess() {
+    mockOpenAICreate.mockResolvedValue({
+      choices: [{ message: { content: '## Unreleased — 2024-01-15\n\n### ✨ Features\n- Shiny new thing' } }],
+    });
+  }
+
+  // Default: git succeeds silently (status shows changes so commit runs)
+  function setupGitSuccess() {
+    execSync.mockImplementation((cmd) => {
+      if (cmd === 'git status --porcelain') return Buffer.from('M CHANGELOG.md');
+      return Buffer.from('');
+    });
+  }
+
+  // Default: CHANGELOG.md doesn't exist yet
+  function setupNoChangelog() {
+    fs.existsSync.mockReturnValue(false);
+    fs.writeFileSync.mockImplementation(() => {});
+  }
+
+  test('happy path: public repo, valid inputs, OpenAI returns content → changelog written and committed', async () => {
+    setupInputs();
+    setupPublicRepo();
+    setupNoReleases();
+    setupOpenAISuccess();
+    setupNoChangelog();
+    setupGitSuccess();
+
+    await run();
+
+    // Should NOT have called setFailed
+    expect(core.setFailed).not.toHaveBeenCalled();
+
+    // Should have written the changelog
+    expect(fs.writeFileSync).toHaveBeenCalledWith('CHANGELOG.md', expect.stringContaining('# Changelog'));
+
+    // Should have pushed
+    expect(execSync).toHaveBeenCalledWith('git push');
+
+    // Final success log
+    expect(core.info).toHaveBeenCalledWith('✅ Difflog complete.');
+  });
+
+  test('private repo, no license key → setFailed called with license message', async () => {
+    setupInputs({ licenseKey: '' }); // no license key
+    setupPrivateRepo();
+
+    await run();
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      'Difflog requires a license key for private repositories. Get one at https://difflog.io'
+    );
+
+    // Should not have touched OpenAI or git
+    expect(mockOpenAICreate).not.toHaveBeenCalled();
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  test('private repo, with license key → logs validation message and continues', async () => {
+    setupInputs({ licenseKey: 'dlk_test_123' });
+    setupPrivateRepo();
+    setupNoReleases();
+    setupOpenAISuccess();
+    setupNoChangelog();
+    setupGitSuccess();
+
+    await run();
+
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.info).toHaveBeenCalledWith('License key found — validation coming in v1.1');
+    expect(core.info).toHaveBeenCalledWith('✅ Difflog complete.');
+  });
+
+  test('OpenAI failure after retry → setFailed called with status.openai.com link', async () => {
+    setupInputs();
+    setupPublicRepo();
+    setupNoReleases();
+
+    // OpenAI always fails
+    mockOpenAICreate.mockRejectedValue(new Error('503 Service Unavailable'));
+
+    await run();
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('https://status.openai.com')
+    );
+
+    // Changelog should NOT have been written
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  test('git push failure → setFailed called with permissions guidance', async () => {
+    setupInputs();
+    setupPublicRepo();
+    setupNoReleases();
+    setupOpenAISuccess();
+    setupNoChangelog();
+
+    // Simulate push failing
+    execSync.mockImplementation((cmd) => {
+      if (cmd === 'git status --porcelain') return Buffer.from('M CHANGELOG.md');
+      if (cmd === 'git push') throw new Error('remote: Permission denied');
+      return Buffer.from('');
+    });
+
+    await run();
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('permissions: contents: write')
+    );
+  });
+
+  test('CHANGELOG.md write failure → backup restored, warning issued (not hard fail)', async () => {
+    setupInputs();
+    setupPublicRepo();
+    setupNoReleases();
+    setupOpenAISuccess();
+
+    // File exists
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockReturnValue('# Changelog\n\n## v0.9.0\n\n- Old stuff');
+    fs.copyFileSync.mockImplementation(() => {}); // backup succeeds
+    fs.writeFileSync.mockImplementation(() => { throw new Error('EROFS: read-only file system'); });
+    fs.unlinkSync.mockImplementation(() => {});
+
+    await run();
+
+    // Should warn, not fail hard
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to write CHANGELOG.md')
+    );
+    expect(core.setFailed).not.toHaveBeenCalled();
   });
 });

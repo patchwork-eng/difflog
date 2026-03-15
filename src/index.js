@@ -154,6 +154,41 @@ async function callOpenAIWithRetry(openai, model, systemPrompt, userPrompt, maxR
   throw new Error(`OpenAI API unavailable after ${maxRetries + 1} attempt(s): ${lastErr.message}`);
 }
 
+/**
+ * Check license key requirements.
+ * - Public repos: no license required, always passes.
+ * - Private repos without a license key: hard failure.
+ * - Private repos with a license key: logs and passes (real validation coming in v1.1).
+ * Returns false if the caller should abort, true/undefined to continue.
+ */
+async function checkLicense(octokit, owner, repo, licenseKey) {
+  let isPrivate = false;
+  try {
+    const { data: repoData } = await octokit.repos.get({ owner, repo });
+    isPrivate = repoData.private;
+  } catch (err) {
+    core.warning(`Could not determine repo visibility: ${err.message}. Assuming public.`);
+    return true; // fail open — don't block if we can't tell
+  }
+
+  if (!isPrivate) {
+    // Public repo — no license required, run normally
+    return true;
+  }
+
+  // Private repo
+  if (!licenseKey) {
+    core.setFailed(
+      'Difflog requires a license key for private repositories. Get one at https://difflog.io'
+    );
+    return false;
+  }
+
+  // License key provided — validation coming in v1.1
+  core.info('License key found — validation coming in v1.1');
+  return true;
+}
+
 // ── Main orchestrator ────────────────────────────────────────────────────────
 
 async function run() {
@@ -162,6 +197,7 @@ async function run() {
     const openaiKey = core.getInput('openai_key', { required: true });
     const model = core.getInput('model') || 'gpt-4o-mini';
     const maxCommits = parseInt(core.getInput('max_commits') || '50', 10);
+    const licenseKey = core.getInput('license_key') || '';
 
     if (!openaiKey) {
       core.setFailed(
@@ -183,6 +219,12 @@ async function run() {
     const sha = github.context.sha;
 
     core.info(`Running Difflog on ${owner}/${repo} @ ${sha.slice(0, 7)}`);
+
+    // ── License key enforcement ──────────────────────────────────────────────
+    const licenseOk = await checkLicense(octokit, owner, repo, licenseKey);
+    if (!licenseOk) {
+      return; // setFailed already called inside checkLicense
+    }
 
     // ── Find the latest release tag ──────────────────────────────────────────
     let latestTag = null;
@@ -263,17 +305,56 @@ async function run() {
       return;
     }
 
-    // ── Write CHANGELOG.md ───────────────────────────────────────────────────
+    // ── Write CHANGELOG.md (with backup/restore for safety) ─────────────────
     let existingContent = '';
-    if (fs.existsSync('CHANGELOG.md')) {
+    const changelogExists = fs.existsSync('CHANGELOG.md');
+
+    if (changelogExists) {
       existingContent = fs.readFileSync('CHANGELOG.md', 'utf8');
+      // Create backup before writing
+      try {
+        fs.copyFileSync('CHANGELOG.md', 'CHANGELOG.md.bak');
+      } catch (bakErr) {
+        core.warning(`Could not create CHANGELOG.md backup: ${bakErr.message}. Proceeding without backup.`);
+      }
     } else {
       core.info('CHANGELOG.md not found — creating it fresh.');
     }
 
     const updatedChangelog = prependChangelog(existingContent, newSection, nextVersion);
-    fs.writeFileSync('CHANGELOG.md', updatedChangelog);
-    core.info('CHANGELOG.md written.');
+
+    try {
+      fs.writeFileSync('CHANGELOG.md', updatedChangelog);
+      core.info('CHANGELOG.md written.');
+      // Clean up backup on success
+      if (changelogExists && fs.existsSync('CHANGELOG.md.bak')) {
+        try {
+          fs.unlinkSync('CHANGELOG.md.bak');
+        } catch (_) {
+          // Non-critical — backup cleanup failure is fine
+        }
+      }
+    } catch (writeErr) {
+      // Restore from backup if available — partial run beats broken file
+      if (changelogExists && fs.existsSync('CHANGELOG.md.bak')) {
+        try {
+          fs.copyFileSync('CHANGELOG.md.bak', 'CHANGELOG.md');
+          fs.unlinkSync('CHANGELOG.md.bak');
+          core.warning(
+            `Failed to write CHANGELOG.md — restored from backup. Error: ${writeErr.message}`
+          );
+        } catch (restoreErr) {
+          core.warning(
+            `Failed to write CHANGELOG.md AND failed to restore from backup: ${writeErr.message}. ` +
+            'Backup available at CHANGELOG.md.bak'
+          );
+        }
+      } else {
+        core.warning(`Failed to write CHANGELOG.md: ${writeErr.message}`);
+      }
+      return;
+    }
+
     core.setOutput('changelog_path', 'CHANGELOG.md');
 
     // ── Commit CHANGELOG.md back to the repo ─────────────────────────────────
@@ -285,14 +366,29 @@ async function run() {
       const status = execSync('git status --porcelain').toString().trim();
       if (status) {
         execSync(`git commit -m "chore: update CHANGELOG.md for ${nextVersion} [skip ci]"`);
-        execSync('git push');
-        core.info('CHANGELOG.md committed and pushed.');
+
+        // Push is a hard failure — a committed but un-pushed changelog is misleading
+        try {
+          execSync('git push');
+          core.info('CHANGELOG.md committed and pushed.');
+        } catch (pushErr) {
+          core.setFailed(
+            `Difflog committed CHANGELOG.md but failed to push: ${pushErr.message}\n` +
+            'This is usually a permissions issue with GITHUB_TOKEN. ' +
+            'Make sure your workflow has "permissions: contents: write" and that ' +
+            'the token has push access to the repository.'
+          );
+          return;
+        }
       } else {
         core.info('No changes to CHANGELOG.md — nothing to commit.');
       }
     } catch (gitErr) {
-      core.warning(`Could not commit CHANGELOG.md: ${gitErr.message}`);
-      core.warning('Ensure the workflow has "permissions: contents: write".');
+      core.setFailed(
+        `Git operation failed while preparing to commit CHANGELOG.md: ${gitErr.message}\n` +
+        'Ensure the workflow has "permissions: contents: write".'
+      );
+      return;
     }
 
     core.info('✅ Difflog complete.');
@@ -302,7 +398,7 @@ async function run() {
 }
 
 // ── Exports (for testing) ────────────────────────────────────────────────────
-module.exports = { filterCommits, bumpVersion, buildPrompt, prependChangelog, callOpenAIWithRetry };
+module.exports = { filterCommits, bumpVersion, buildPrompt, prependChangelog, callOpenAIWithRetry, run };
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 if (require.main === module) {

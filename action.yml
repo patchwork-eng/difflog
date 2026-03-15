@@ -18,6 +18,10 @@ inputs:
     description: "Maximum number of commits to include in the changelog prompt"
     required: false
     default: "50"
+  license_key:
+    description: "Difflog license key. Required for private repositories. Get one at https://difflog.io"
+    required: false
+    default: ""
 
 outputs:
   changelog_path:
