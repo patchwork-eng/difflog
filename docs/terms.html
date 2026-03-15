@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — Difflog</title>
+  <meta name="description" content="Difflog Terms of Service. Plain English. No tricks.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --bg-2:      #161b22;
+      --bg-3:      #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --green:     #238636;
+      --green-2:   #2ea043;
+      --green-light:#3fb950;
+      --radius:    8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--green-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(8px);
+    }
+    nav .inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green-light);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text-muted); }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 64px 24px 96px;
+    }
+
+    .doc-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: clamp(26px, 4vw, 40px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+
+    .effective {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 48px;
+    }
+
+    .tldr {
+      background: var(--bg-2);
+      border: 1px solid var(--green);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+    .tldr .tldr-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 10px;
+    }
+    .tldr p {
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 40px 0 12px;
+      color: var(--text);
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 14px;
+    }
+
+    p strong { color: var(--text); }
+
+    ul {
+      list-style: none;
+      margin: 0 0 16px 0;
+      padding: 0;
+    }
+    ul li {
+      font-size: 15px;
+      color: var(--text-muted);
+      padding-left: 20px;
+      position: relative;
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+    ul li::before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: var(--green-light);
+      font-weight: 700;
+    }
+    ul li strong { color: var(--text); }
+
+    .warning-box {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid #e3b341;
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+    }
+    .warning-box p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .warning-box p strong { color: #e3b341; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 48px 0;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer .links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 10px;
+    }
+    footer .links a {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer .links a:hover { color: var(--green-light); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <a href="/" class="logo">diff<span>log</span></a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="doc-label">// legal</div>
+  <h1>Terms of Service</h1>
+  <p class="effective">Effective date: March 15, 2026</p>
+
+  <div class="tldr">
+    <div class="tldr-label">tl;dr</div>
+    <p>You bring your own OpenAI key. You own the output. The Action commits to your repo automatically — <strong>review it before you publish it</strong>. Subscriptions are monthly, cancel anytime. LLM output isn't guaranteed to be accurate.</p>
+  </div>
+
+  <h2>What Difflog is</h2>
+  <p>Difflog is a GitHub Action that reads your git commit history since the last release and uses a large language model (LLM) to generate a <code>CHANGELOG.md</code>. It commits that file directly back to your repository.</p>
+  <p>The service has two parts: the open-source GitHub Action (the code that runs in your repo) and a license key system that gates access to private repository support. By using either part, you agree to these terms.</p>
+
+  <h2>Your OpenAI key — your responsibility</h2>
+  <p>Difflog uses a BYOK (Bring Your Own Key) model. You provide your own OpenAI API key. This means:</p>
+  <ul>
+    <li>Your commits go from your GitHub Actions runner directly to OpenAI — not through us.</li>
+    <li>You're responsible for your OpenAI account, usage costs, and API key security.</li>
+    <li>We have no visibility into those API calls and no liability for OpenAI's service availability or pricing.</li>
+    <li>Your use of OpenAI is governed by <a href="https://openai.com/policies/terms-of-use" target="_blank" rel="noopener">OpenAI's terms of use</a>.</li>
+  </ul>
+
+  <h2>The auto-commit behavior</h2>
+  <p>After generating your changelog, the Action commits <code>CHANGELOG.md</code> back to your repository using your <code>GITHUB_TOKEN</code>. This is a feature, but it comes with responsibility on your side.</p>
+
+  <div class="warning-box">
+    <p><strong>Important:</strong> Difflog commits to your repo automatically. You are responsible for reviewing the output before merging it into release branches, tagging a release, or publishing to users. The commit Difflog creates is no different from any other commit — your normal review process applies.</p>
+  </div>
+
+  <p>If your CI/CD pipeline automatically publishes release notes from <code>CHANGELOG.md</code>, make sure you have a review step in place. We're not responsible for changelog content that gets published without review.</p>
+
+  <h2>LLM output — no guarantees</h2>
+  <p>Difflog uses a language model to generate changelogs. LLMs are powerful but imperfect. The output might:</p>
+  <ul>
+    <li>Miss commits or mischaracterize what they did</li>
+    <li>Include phrasing that doesn't match your project's voice</li>
+    <li>Occasionally hallucinate details (rare, but possible)</li>
+  </ul>
+  <p><strong>Always review the generated changelog before it reaches your users.</strong> We provide Difflog as a tool to automate the tedious parts — final judgment is yours.</p>
+  <p>We make no warranty, express or implied, about the accuracy, completeness, or fitness for purpose of any LLM-generated output.</p>
+
+  <h2>Who owns the output</h2>
+  <p>You do. The changelog Difflog generates is derived from your commit history, written into your repository, under your account. We claim no rights to it.</p>
+
+  <h2>License keys and account access</h2>
+  <p>Paid plans require a license key, which we issue to the email you provide at checkout. Your key is tied to your subscription.</p>
+  <ul>
+    <li>Don't share your license key publicly or in public repos.</li>
+    <li>If your key leaks, email us and we'll rotate it.</li>
+    <li>One subscription covers the number of repositories specified in your plan (5 for Indie, unlimited for Teams).</li>
+  </ul>
+
+  <h2>Subscription and billing</h2>
+  <p>Paid plans are billed monthly via Stripe. Here's how it works:</p>
+  <ul>
+    <li><strong>Monthly billing.</strong> Your subscription renews automatically each month.</li>
+    <li><strong>Cancel anytime.</strong> Cancel before your next billing date and you won't be charged again. You keep access through the end of the period you've paid for.</li>
+    <li><strong>No refunds on partial months.</strong> If you cancel mid-cycle, access continues until the period ends — we don't prorate refunds for unused days.</li>
+    <li><strong>Plan changes.</strong> Upgrades take effect immediately. Downgrades take effect at the next billing cycle.</li>
+  </ul>
+  <p>Payment is processed by Stripe. We don't store your payment details. Billing disputes should go through your card issuer or Stripe directly.</p>
+
+  <h2>Fair use</h2>
+  <p>Don't use Difflog to abuse OpenAI's API, circumvent GitHub's rate limits, or do anything that would get your GitHub account or OpenAI account suspended. Don't resell access to the Action or license keys.</p>
+
+  <h2>Service availability</h2>
+  <p>We'll do our best to keep the license validation service running. But GitHub Actions can fail, OpenAI has outages, and software has bugs. We don't offer uptime guarantees. Difflog is provided as-is.</p>
+
+  <h2>Limitation of liability</h2>
+  <p>To the maximum extent permitted by law: Difflog, patchwork-eng, and its operators are not liable for any indirect, incidental, special, or consequential damages arising from your use of the service — including but not limited to incorrect changelog content, repository changes, or data loss.</p>
+  <p>Our total liability to you for any claim related to Difflog will not exceed the amount you've paid us in the three months preceding the claim.</p>
+
+  <h2>Changes to these terms</h2>
+  <p>If we make material changes, we'll update the effective date and try to notify active subscribers by email. Continued use of the service after changes take effect means you accept the updated terms.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about these terms: <a href="mailto:ai.company.37@gmail.com">ai.company.37@gmail.com</a>.</p>
+</div>
+
+<footer>
+  <div class="container" style="padding-top: 0; padding-bottom: 0;">
+    <p>© 2026 Difflog / patchwork-eng</p>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Service</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

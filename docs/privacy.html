@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Difflog</title>
+  <meta name="description" content="Difflog's privacy policy. Short version: we barely collect anything.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --bg-2:      #161b22;
+      --bg-3:      #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --green:     #238636;
+      --green-2:   #2ea043;
+      --green-light:#3fb950;
+      --radius:    8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--green-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(8px);
+    }
+    nav .inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green-light);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text-muted); }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 64px 24px 96px;
+    }
+
+    .doc-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: clamp(26px, 4vw, 40px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+
+    .effective {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 48px;
+    }
+
+    .tldr {
+      background: var(--bg-2);
+      border: 1px solid var(--green);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+    .tldr .tldr-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 10px;
+    }
+    .tldr p {
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 40px 0 12px;
+      color: var(--text);
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.8;
+      margin-bottom: 14px;
+    }
+
+    p strong { color: var(--text); }
+
+    ul {
+      list-style: none;
+      margin: 0 0 16px 0;
+      padding: 0;
+    }
+    ul li {
+      font-size: 15px;
+      color: var(--text-muted);
+      padding-left: 20px;
+      position: relative;
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+    ul li::before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: var(--green-light);
+      font-weight: 700;
+    }
+    ul li strong { color: var(--text); }
+
+    .not-list li::before {
+      content: "✗";
+      color: var(--text-muted);
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 48px 0;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer .links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 10px;
+    }
+    footer .links a {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer .links a:hover { color: var(--green-light); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <a href="/" class="logo">diff<span>log</span></a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="doc-label">// legal</div>
+  <h1>Privacy Policy</h1>
+  <p class="effective">Effective date: March 15, 2026</p>
+
+  <div class="tldr">
+    <div class="tldr-label">tl;dr</div>
+    <p>We collect your email (to send your license key) and subscription status via Stripe. <strong>We never see your code, your commits, or your OpenAI API key.</strong> That's the whole point of how Difflog works.</p>
+  </div>
+
+  <h2>Who we are</h2>
+  <p>Difflog is a GitHub Action that reads your git commit history and generates a <code>CHANGELOG.md</code> using an LLM. It's built and operated by patchwork-eng. Questions? Email us at <a href="mailto:ai.company.37@gmail.com">ai.company.37@gmail.com</a>.</p>
+
+  <h2>What we collect</h2>
+  <p>We collect the minimum needed to run the service:</p>
+  <ul>
+    <li><strong>Email address</strong> — to deliver your license key after purchase. That's it.</li>
+    <li><strong>Subscription status</strong> — whether your plan is active, via Stripe. We use this to validate your license key at runtime.</li>
+  </ul>
+
+  <h2>What we don't collect</h2>
+  <p>This is the important part:</p>
+  <ul class="not-list">
+    <li><strong>Your code.</strong> Difflog runs inside your GitHub Actions runner on GitHub's infrastructure. Your source code never touches our servers.</li>
+    <li><strong>Your commits.</strong> The commit history Difflog reads stays on your runner. It's sent directly from your runner to OpenAI — not through us.</li>
+    <li><strong>Your OpenAI API key.</strong> Your key lives in your GitHub Secrets. We don't proxy it, store it, or have any way to access it.</li>
+    <li><strong>Usage data, analytics, or telemetry.</strong> We don't run instrumentation on the Action itself.</li>
+  </ul>
+
+  <h2>How payment data works</h2>
+  <p>All payment processing is handled by <a href="https://stripe.com" target="_blank" rel="noopener">Stripe</a>. We don't see or store your credit card number, billing address, or any payment details. When you complete a purchase, Stripe notifies us that a subscription was created, and we issue a license key to your email. That's the extent of our involvement in the transaction.</p>
+  <p>Stripe has its own privacy policy at <a href="https://stripe.com/privacy" target="_blank" rel="noopener">stripe.com/privacy</a>.</p>
+
+  <h2>How we use your email</h2>
+  <p>Your email is used for:</p>
+  <ul>
+    <li>Delivering your license key</li>
+    <li>Sending transactional emails related to your subscription (renewals, cancellations, billing issues)</li>
+  </ul>
+  <p>We don't send marketing emails. We don't sell your email to anyone.</p>
+
+  <h2>Data retention</h2>
+  <p>We keep your email and subscription record for as long as your account is active. If you cancel your subscription and want your data deleted, email us at <a href="mailto:ai.company.37@gmail.com">ai.company.37@gmail.com</a> and we'll take care of it.</p>
+
+  <h2>Third-party services</h2>
+  <p>The services we rely on:</p>
+  <ul>
+    <li><strong>Stripe</strong> — payment processing and subscription management</li>
+    <li><strong>GitHub</strong> — the platform the Action runs on. Your use of GitHub Actions is subject to <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub's privacy policy</a>.</li>
+    <li><strong>OpenAI</strong> — the LLM provider. Your commits are sent to OpenAI using <em>your</em> API key, under <em>your</em> OpenAI account. We have no visibility into those calls. Review <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI's privacy policy</a> for how they handle your data.</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>This website doesn't use tracking cookies. Stripe may set cookies during checkout as part of their fraud prevention systems.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If we make meaningful changes, we'll update the effective date at the top. We'll also try to email affected users if the changes are significant. The policy lives at <a href="/privacy">difflog.io/privacy</a>.</p>
+
+  <h2>Contact</h2>
+  <p>Privacy questions, data deletion requests, or anything else: <a href="mailto:ai.company.37@gmail.com">ai.company.37@gmail.com</a>.</p>
+</div>
+
+<footer>
+  <div class="container" style="padding-top: 0; padding-bottom: 0;">
+    <p>© 2026 Difflog / patchwork-eng</p>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Service</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
