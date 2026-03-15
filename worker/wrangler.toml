@@ -1,0 +1,14 @@
+name = "difflog-license"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Workers free tier handles 100,000 requests/day — plenty for license validation.
+# Upgrade to paid ($5/mo) if you hit limits.
+
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "PLACEHOLDER_KV_ID"
+# Replace with real ID after running: wrangler kv namespace create LICENSES
+
+# Secrets — set via CLI, never in this file:
+#   wrangler secret put STRIPE_WEBHOOK_SECRET

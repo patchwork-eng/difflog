@@ -38576,8 +38576,8 @@ async function callOpenAIWithRetry(openai, model, systemPrompt, userPrompt, maxR
  * Check license key requirements.
  * - Public repos: no license required, always passes.
  * - Private repos without a license key: hard failure.
- * - Private repos with a license key: logs and passes (real validation coming in v1.1).
- * Returns false if the caller should abort, true/undefined to continue.
+ * - Private repos with a license key: validates against the Difflog license Worker.
+ * Returns false if the caller should abort, true to continue.
  */
 async function checkLicense(octokit, owner, repo, licenseKey) {
   let isPrivate = false;
@@ -38602,9 +38602,72 @@ async function checkLicense(octokit, owner, repo, licenseKey) {
     return false;
   }
 
-  // License key provided — validation coming in v1.1
-  core.info('License key found — validation coming in v1.1');
-  return true;
+  // Validate license key against the Difflog license Worker
+  const WORKER_URL = 'https://difflog-license.patchwork-eng.workers.dev/validate';
+  const githubUsername = owner; // The repo owner is the license holder
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+    let response;
+    try {
+      response = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: licenseKey, github_username: githubUsername }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      // Non-2xx from the Worker — treat as validation failure only if it's a client error
+      if (response.status >= 400 && response.status < 500) {
+        const data = await response.json().catch(() => ({}));
+        core.setFailed(
+          `License validation failed: ${data.message || 'Invalid license key.'} ` +
+          'Get a license at https://difflog.io'
+        );
+        return false;
+      }
+      // 5xx or unexpected — fail open with a warning so CI isn't broken by our infra issues
+      core.warning(
+        `Difflog license service returned ${response.status}. ` +
+        'Proceeding anyway — contact support if this persists.'
+      );
+      return true;
+    }
+
+    const data = await response.json();
+
+    if (!data.valid) {
+      core.setFailed(
+        `${data.message || 'License validation failed.'} ` +
+        'Get a license at https://difflog.io'
+      );
+      return false;
+    }
+
+    core.info(`License valid. Plan: ${data.plan || 'indie'}`);
+    return true;
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      // Timeout — fail open so CI isn't broken by network issues
+      core.warning(
+        'Difflog license service timed out. Proceeding — validate your key at https://difflog.io'
+      );
+    } else {
+      // Network error — fail open
+      core.warning(
+        `Could not reach Difflog license service: ${err.message}. ` +
+        'Proceeding — validate your key at https://difflog.io'
+      );
+    }
+    return true;
+  }
 }
 
 // ── Main orchestrator ────────────────────────────────────────────────────────
