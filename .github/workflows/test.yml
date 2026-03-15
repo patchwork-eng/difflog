@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0  # Full history so we can compare against tags
 
       - name: Run Difflog
-        uses: patchwork-eng/difflog@main
+        uses: ./
         with:
           openai_key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-4o-mini

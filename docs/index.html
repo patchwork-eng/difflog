@@ -323,6 +323,91 @@
     }
     .plan-features li strong { color: var(--text); }
 
+    /* ── Trust / BYOK ── */
+    .trust-lead {
+      font-size: 18px;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 36px;
+      line-height: 1.6;
+      max-width: 680px;
+    }
+    .trust-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .trust-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 22px;
+    }
+    .trust-card-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 10px;
+    }
+    .trust-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+    .trust-card p strong { color: var(--text); }
+    .trust-footnote {
+      margin-top: 28px;
+      font-size: 14px;
+      color: var(--text-muted);
+      border-left: 3px solid var(--border);
+      padding-left: 16px;
+      line-height: 1.7;
+    }
+
+    /* ── Get Started / Onboarding ── */
+    .onboarding-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .onboarding-step {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+    }
+    .onboarding-step .step-num {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--green-light);
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+    .onboarding-step h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .onboarding-step p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+    .onboarding-step p strong { color: var(--text); }
+    .onboarding-footnote {
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .onboarding-footnote a { color: var(--green-light); }
+
     /* ── Install ── */
     .install-intro {
       color: var(--text-muted);
@@ -451,6 +536,40 @@
   </div>
 </section>
 
+<!-- ══ TRUST / BYOK ══ -->
+<section class="trust">
+  <div class="container">
+    <div class="section-label">// privacy by design</div>
+    <h2>We never see your commits.</h2>
+    <p class="trust-lead">Most tools ask you to trust them with your code. We designed it so you don't have to.</p>
+
+    <div class="trust-grid">
+      <div class="trust-card">
+        <div class="trust-card-label">Your code stays yours</div>
+        <p>Difflog reads your git history <strong>inside your own GitHub Actions runner</strong>. That process runs entirely on GitHub's infrastructure. It never touches our servers.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-card-label">Your API key lives in your secrets</div>
+        <p>Your OpenAI key is stored in <strong>your GitHub Secrets</strong>. We don't proxy it, store it, or ever see it. The LLM call goes from your runner to OpenAI — directly.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-card-label">The only thing we touch</div>
+        <p>We issue a <strong>license key</strong> to unlock private repo access. That key validates your subscription status. That's the only data that passes through our system.</p>
+      </div>
+      <div class="trust-card">
+        <div class="trust-card-label">A deliberate architecture</div>
+        <p>BYOK isn't a limitation we're working around. It's a decision we made on your behalf. <strong>You shouldn't have to hand your codebase to a third party to automate a changelog.</strong></p>
+      </div>
+    </div>
+
+    <p class="trust-footnote">
+      Difflog's architecture is fully inspectable. The action source is public at
+      <a href="https://github.com/patchwork-eng/difflog">github.com/patchwork-eng/difflog</a>.
+      Read exactly what it does before you run it.
+    </p>
+  </div>
+</section>
+
 <!-- ══ PRICING ══ -->
 <section>
   <div class="container">
@@ -496,6 +615,50 @@
         </ul>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ══ GET STARTED ══ -->
+<section>
+  <div class="container">
+    <div class="section-label">// how to get started</div>
+    <h2>From checkout to running in under 5 minutes.</h2>
+
+    <div class="onboarding-steps">
+      <div class="onboarding-step">
+        <div class="step-num">STEP 01</div>
+        <h3>Get your license key.</h3>
+        <p>Click your plan. Checkout takes 60 seconds. Your license key arrives by email — it looks like <code class="inline-code">difflog_xxxxxxxxxxxxxxxx</code>.</p>
+      </div>
+      <div class="onboarding-step">
+        <div class="step-num">STEP 02</div>
+        <h3>Add it to GitHub Secrets.</h3>
+        <p>In your repo: <strong>Settings → Secrets and variables → Actions → New repository secret.</strong><br><br>
+        Name: <code class="inline-code">DIFFLOG_LICENSE_KEY</code><br>
+        Value: your key.</p>
+      </div>
+      <div class="onboarding-step">
+        <div class="step-num">STEP 03</div>
+        <h3>Push a tag. Get a changelog.</h3>
+        <p>Your workflow runs. Difflog reads commits since your last release, calls your OpenAI key, and writes <code class="inline-code">CHANGELOG.md</code>. Done.</p>
+      </div>
+    </div>
+
+    <div class="code-wrap" style="margin-top: 40px;">
+      <div class="code-header">
+        <span>.github/workflows/changelog.yml — the key step</span>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><span class="y-punct">-</span> <span class="y-key">uses</span><span class="y-punct">:</span> <span class="y-value">patchwork-eng/difflog@v1</span>
+  <span class="y-key">with</span><span class="y-punct">:</span>
+    <span class="y-key">openai_key</span><span class="y-punct">:</span> <span class="y-var">${{ secrets.OPENAI_API_KEY }}</span>
+    <span class="y-key">license_key</span><span class="y-punct">:</span> <span class="y-var">${{ secrets.DIFFLOG_LICENSE_KEY }}</span></pre>
+    </div>
+
+    <p class="onboarding-footnote">
+      Need an OpenAI key? It takes 5 minutes at <a href="https://platform.openai.com">platform.openai.com</a>.
+      Pricing is negligible — a typical changelog run costs less than a fraction of a cent.
+    </p>
   </div>
 </section>
 
