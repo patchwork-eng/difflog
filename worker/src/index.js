@@ -87,28 +87,56 @@ function jsonResponse(data, status = 200) {
  * @param {object} env         - Worker environment bindings
  */
 async function sendLicenseKeyEmail(email, licenseKey, plan, env) {
-  console.log(`TODO: wire Resend — would send license key to ${email} (plan: ${plan}, key: ${licenseKey})`);
-  // Example implementation once RESEND_API_KEY is configured:
-  //
-  // const res = await fetch('https://api.resend.com/emails', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-  //     'Content-Type': 'application/json',
-  //   },
-  //   body: JSON.stringify({
-  //     from: 'Difflog <noreply@difflog.io>',
-  //     to: [email],
-  //     subject: 'Your Difflog license key',
-  //     html: `<p>Your license key for the <strong>${plan}</strong> plan:</p>
-  //            <pre>${licenseKey}</pre>
-  //            <p>Add it as a GitHub Secret named <code>DIFFLOG_LICENSE_KEY</code>.</p>`,
-  //   }),
-  // });
-  // if (!res.ok) {
-  //   const body = await res.text();
-  //   console.error('Resend error:', res.status, body);
-  // }
+  if (!env.RESEND_API_KEY) {
+    console.warn('RESEND_API_KEY not set — skipping license key email');
+    return;
+  }
+
+  const planLabel = plan === 'teams' ? 'Teams' : 'Indie';
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; color: #24292f;">
+      <h2 style="color: #1a7f37;">Your Difflog license key</h2>
+      <p>Thanks for subscribing to Difflog <strong>${planLabel}</strong>.</p>
+      <p>Here's your license key:</p>
+      <pre style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; font-size: 14px; word-break: break-all;">${licenseKey}</pre>
+      <h3>Add it to GitHub Secrets</h3>
+      <ol>
+        <li>Go to your repo → <strong>Settings → Secrets and variables → Actions</strong></li>
+        <li>Click <strong>New repository secret</strong></li>
+        <li>Name: <code>DIFFLOG_LICENSE_KEY</code></li>
+        <li>Value: paste the key above</li>
+      </ol>
+      <p>Then add it to your workflow:</p>
+      <pre style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; font-size: 13px;">- uses: patchwork-eng/difflog@v1
+  with:
+    openai_key: \${{ secrets.OPENAI_API_KEY }}
+    license_key: \${{ secrets.DIFFLOG_LICENSE_KEY }}</pre>
+      <p>Questions? Reply to this email or reach us at <a href="mailto:hello@difflog.io">hello@difflog.io</a>.</p>
+      <hr style="border: none; border-top: 1px solid #d0d7de; margin: 24px 0;">
+      <p style="font-size: 12px; color: #57606a;">Difflog · <a href="https://difflog.io">difflog.io</a></p>
+    </div>
+  `;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Difflog <hello@difflog.io>',
+      to: [email],
+      subject: `Your Difflog ${planLabel} license key`,
+      html,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error('Resend error:', res.status, body);
+  } else {
+    console.log(`License key email sent to ${email}`);
+  }
 }
 
 // --- Route handlers -----------------------------------------------------------
