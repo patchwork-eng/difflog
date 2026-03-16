@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Difflog — Subscribe</title>
+  <meta name="description" content="Choose a Difflog plan. Indie $9/mo or Teams $29/mo.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --bg-2:        #161b22;
+      --bg-3:        #21262d;
+      --border:      #30363d;
+      --text:        #e6edf3;
+      --text-muted:  #8b949e;
+      --green:       #238636;
+      --green-2:     #2ea043;
+      --green-light: #3fb950;
+      --radius:      8px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    a { color: var(--green-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      position: sticky;
+      top: 0;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+    nav .inner {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green-light);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text-muted); }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 72px 0 48px;
+      text-align: center;
+    }
+    .section-label {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-light);
+      margin-bottom: 12px;
+    }
+    .hero h1 {
+      font-size: clamp(26px, 4.5vw, 44px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ── Pricing grid ── */
+    .plans {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      padding: 48px 0 72px;
+    }
+
+    .plan-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: border-color 0.15s;
+    }
+    .plan-card:hover { border-color: var(--green); }
+    .plan-card.featured {
+      border-color: var(--green);
+      position: relative;
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--green);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 12px;
+      border-radius: 99px;
+      white-space: nowrap;
+    }
+
+    .plan-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .plan-price {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .plan-price .amount {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      color: var(--text);
+    }
+    .plan-price .currency {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-muted);
+      align-self: flex-start;
+      margin-top: 6px;
+    }
+    .plan-price .period {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .plan-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .plan-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+    .plan-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .plan-features li::before {
+      content: '✓';
+      color: var(--green-light);
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--green);
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: background 0.15s;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+    }
+    .btn:hover { background: var(--green-2); text-decoration: none; }
+    .btn.btn-outline {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn.btn-outline:hover { border-color: var(--green); background: rgba(35,134,54,0.08); }
+
+    /* ── Email capture ── */
+    .notify-section {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 36px;
+      text-align: center;
+      margin-bottom: 72px;
+    }
+    .notify-section h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .notify-section p {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 24px;
+    }
+    .email-form {
+      display: flex;
+      gap: 10px;
+      max-width: 420px;
+      margin: 0 auto;
+      flex-wrap: wrap;
+    }
+    .email-form input[type="email"] {
+      flex: 1;
+      min-width: 200px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 15px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .email-form input[type="email"]::placeholder { color: var(--text-muted); }
+    .email-form input[type="email"]:focus { border-color: var(--green); }
+    .email-form .btn {
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    /* ── Pill: coming soon ── */
+    .coming-soon-pill {
+      display: inline-block;
+      background: rgba(35,134,54,0.15);
+      border: 1px solid var(--green);
+      color: var(--green-light);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--green-light); }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="inner">
+      <a class="logo" href="https://difflog.io">difflog<span>.io</span></a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="section-label">Pricing</div>
+      <h1>Simple, honest pricing</h1>
+      <p>Start free on any public repo. Upgrade for private repos, team features, and priority support.</p>
+    </div>
+
+    <!-- Plan cards -->
+    <div class="plans">
+
+      <!-- Indie -->
+      <div class="plan-card">
+        <div>
+          <div class="plan-name">Indie</div>
+          <div class="plan-price">
+            <span class="currency">$</span>
+            <span class="amount">9</span>
+            <span class="period">&thinsp;/ mo</span>
+          </div>
+        </div>
+        <p class="plan-desc">Perfect for solo developers and side projects with private repos.</p>
+        <ul class="plan-features">
+          <li>Private repositories</li>
+          <li>Unlimited public repos (always free)</li>
+          <li>AI-generated changelogs</li>
+          <li>Up to 1 seat</li>
+          <li>Email support</li>
+        </ul>
+        <div>
+          <span class="coming-soon-pill">Payment coming soon</span>
+          <a href="#notify" class="btn btn-outline">Get notified at launch</a>
+        </div>
+      </div>
+
+      <!-- Teams (featured) -->
+      <div class="plan-card featured">
+        <span class="plan-badge">Most popular</span>
+        <div>
+          <div class="plan-name">Teams</div>
+          <div class="plan-price">
+            <span class="currency">$</span>
+            <span class="amount">29</span>
+            <span class="period">&thinsp;/ mo</span>
+          </div>
+        </div>
+        <p class="plan-desc">For engineering teams who ship together and want clean changelogs automatically.</p>
+        <ul class="plan-features">
+          <li>Everything in Indie</li>
+          <li>Up to 10 seats</li>
+          <li>Multiple private repos</li>
+          <li>Custom changelog templates</li>
+          <li>Priority support</li>
+          <li>Audit log</li>
+        </ul>
+        <div>
+          <span class="coming-soon-pill">Payment coming soon</span>
+          <a href="#notify" class="btn">Get notified at launch</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Email capture -->
+    <div class="notify-section" id="notify">
+      <h2>🚀 Be first in line</h2>
+      <p>Stripe billing is coming soon. Drop your email and we'll ping you the moment it's live.</p>
+      <form class="email-form" action="mailto:hello@difflog.io" method="get" enctype="text/plain">
+        <input type="email" name="body" placeholder="you@example.com" required>
+        <button type="submit" class="btn">Notify me</button>
+      </form>
+      <p style="margin-top:14px;font-size:13px;color:var(--text-muted);">No spam. Just a one-time launch email.</p>
+    </div>
+
+  </div>
+
+  <footer>
+    <a href="https://difflog.io">← Back to difflog.io</a>
+    &nbsp;·&nbsp;
+    <a href="/terms.html">Terms</a>
+    &nbsp;·&nbsp;
+    <a href="/privacy.html">Privacy</a>
+  </footer>
+
+</body>
+</html>

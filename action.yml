@@ -4,7 +4,7 @@ author: "patchwork-eng"
 
 branding:
   icon: "file-text"
-  color: "blue"
+  color: "green"
 
 inputs:
   openai_key:

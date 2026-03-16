@@ -520,7 +520,7 @@ describe('run()', () => {
     expect(execSync).not.toHaveBeenCalled();
   });
 
-  test('private repo, with license key → logs validation message and continues', async () => {
+  test('private repo, with license key → validates license and continues', async () => {
     setupInputs({ licenseKey: 'dlk_test_123' });
     setupPrivateRepo();
     setupNoReleases();
@@ -528,10 +528,20 @@ describe('run()', () => {
     setupNoChangelog();
     setupGitSuccess();
 
+    // Mock global fetch to simulate a successful license validation response
+    const origFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ valid: true, plan: 'indie' }),
+    });
+
     await run();
 
+    global.fetch = origFetch;
+
     expect(core.setFailed).not.toHaveBeenCalled();
-    expect(core.info).toHaveBeenCalledWith('License key found — validation coming in v1.1');
+    expect(core.info).toHaveBeenCalledWith('License valid. Plan: indie');
     expect(core.info).toHaveBeenCalledWith('✅ Difflog complete.');
   });
 

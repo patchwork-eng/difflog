@@ -5,6 +5,21 @@ const OpenAI = require('openai').default;
 const fs = require('fs');
 const { execSync } = require('child_process');
 
+// ── Sentry (optional — only initialised if SENTRY_DSN is set) ───────────────
+let Sentry = null;
+try {
+  Sentry = require('@sentry/node');
+  const dsn = process.env.SENTRY_DSN;
+  if (dsn) {
+    Sentry.init({ dsn, tracesSampleRate: 1.0 });
+    core.info('Sentry initialised.');
+  } else {
+    Sentry = null; // DSN not provided — skip monitoring silently
+  }
+} catch (_) {
+  Sentry = null; // @sentry/node not bundled — skip silently
+}
+
 const HARD_COMMIT_LIMIT = 200;
 
 // ── Pure / testable functions ────────────────────────────────────────────────
@@ -313,6 +328,7 @@ async function run() {
 
     // ── Fetch commits since last tag ─────────────────────────────────────────
     let rawCommits = [];
+    let commitsPaginated = false;
 
     if (latestTag) {
       try {
@@ -322,7 +338,37 @@ async function run() {
           base: latestTag,
           head: sha,
         });
-        rawCommits = comparison.commits;
+
+        // The compareCommits API caps at 250 commits. If we've hit that ceiling
+        // (ahead_by > 250), paginate via listCommits to get the full set.
+        if (comparison.ahead_by > 250) {
+          core.info(
+            `${comparison.ahead_by} commits ahead — compareCommits ceiling hit. ` +
+            'Paginating via listCommits API...'
+          );
+          commitsPaginated = true;
+          const allCommits = [];
+          let page = 1;
+          while (true) {
+            const { data: page_commits } = await octokit.repos.listCommits({
+              owner,
+              repo,
+              sha,
+              per_page: 100,
+              page,
+            });
+            if (page_commits.length === 0) break;
+            allCommits.push(...page_commits);
+            // Stop once we've collected commits up to (and including) the base tag commit
+            const tagShaShort = comparison.merge_base_commit?.sha;
+            if (tagShaShort && page_commits.some(c => c.sha === tagShaShort)) break;
+            if (page_commits.length < 100) break;
+            page++;
+          }
+          rawCommits = allCommits;
+        } else {
+          rawCommits = comparison.commits;
+        }
       } catch (err) {
         core.warning(`Could not compare to tag ${latestTag}: ${err.message}. Falling back to recent commits.`);
       }
@@ -345,6 +391,14 @@ async function run() {
     if (filtered.length === 0) {
       core.warning('No commits to summarize after filtering. Skipping changelog generation.');
       return;
+    }
+
+    if (commitsPaginated) {
+      core.info(
+        `⚠️  Note: More than 250 commits were found since the last release. ` +
+        `Commits were paginated via the listCommits API. ` +
+        `Processing ${filtered.length} commits after filtering.`
+      );
     }
 
     core.info(`Summarizing ${filtered.length} commits...`);
@@ -465,5 +519,21 @@ module.exports = { filterCommits, bumpVersion, buildPrompt, prependChangelog, ca
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 if (require.main === module) {
-  run();
+  if (Sentry) {
+    Sentry.withScope(async (scope) => {
+      scope.setTag('action', 'difflog');
+      const transaction = Sentry.startTransaction({ name: 'difflog.run', op: 'action' });
+      try {
+        await run();
+      } catch (err) {
+        Sentry.captureException(err);
+        throw err;
+      } finally {
+        transaction.finish();
+        await Sentry.flush(2000);
+      }
+    });
+  } else {
+    run();
+  }
 }
