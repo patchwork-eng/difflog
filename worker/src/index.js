@@ -74,6 +74,43 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+// --- Email helpers ------------------------------------------------------------
+
+/**
+ * Send a license key email to the customer.
+ * TODO: wire Resend — set RESEND_API_KEY as a Worker env variable.
+ * See WORKER_DEPLOY.md for setup instructions.
+ *
+ * @param {string} email       - Customer email address
+ * @param {string} licenseKey  - Generated difflog_... key
+ * @param {string} plan        - 'indie' | 'teams'
+ * @param {object} env         - Worker environment bindings
+ */
+async function sendLicenseKeyEmail(email, licenseKey, plan, env) {
+  console.log(`TODO: wire Resend — would send license key to ${email} (plan: ${plan}, key: ${licenseKey})`);
+  // Example implementation once RESEND_API_KEY is configured:
+  //
+  // const res = await fetch('https://api.resend.com/emails', {
+  //   method: 'POST',
+  //   headers: {
+  //     'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+  //     'Content-Type': 'application/json',
+  //   },
+  //   body: JSON.stringify({
+  //     from: 'Difflog <noreply@difflog.io>',
+  //     to: [email],
+  //     subject: 'Your Difflog license key',
+  //     html: `<p>Your license key for the <strong>${plan}</strong> plan:</p>
+  //            <pre>${licenseKey}</pre>
+  //            <p>Add it as a GitHub Secret named <code>DIFFLOG_LICENSE_KEY</code>.</p>`,
+  //   }),
+  // });
+  // if (!res.ok) {
+  //   const body = await res.text();
+  //   console.error('Resend error:', res.status, body);
+  // }
+}
+
 // --- Route handlers -----------------------------------------------------------
 
 /** POST /validate */
@@ -119,6 +156,25 @@ async function handleValidate(request, env) {
       plan: null,
       message: 'License key is registered to a different GitHub account.',
     });
+  }
+
+  // Log usage to KV
+  try {
+    const usage = Array.isArray(entry.usage) ? entry.usage : [];
+    usage.push({
+      timestamp: Date.now(),
+      github_username,
+      repo_type: 'private',
+    });
+    // Keep only the last 100 usage entries
+    if (usage.length > 100) {
+      usage.splice(0, usage.length - 100);
+    }
+    entry.usage = usage;
+    await env.LICENSES.put(license_key, JSON.stringify(entry));
+  } catch (err) {
+    // Non-fatal: log but don't block the validation response
+    console.error('Usage logging error:', err);
   }
 
   return jsonResponse({
@@ -181,8 +237,13 @@ async function handleStripeWebhook(request, env) {
 
       console.log(`License created for ${githubUsername}: ${licenseKey}`);
 
-      // TODO: email the license key to the customer via SendGrid/Postmark
-      // For now, retrieve keys from the Cloudflare KV dashboard and send manually.
+      // Email the license key to the customer via Resend
+      const customerEmail = session.customer_details && session.customer_details.email;
+      if (customerEmail) {
+        await sendLicenseKeyEmail(customerEmail, licenseKey, plan, env);
+      } else {
+        console.warn('checkout.session.completed: no customer email found, skipping license key email');
+      }
 
       return jsonResponse({ success: true, license_key: licenseKey });
 
