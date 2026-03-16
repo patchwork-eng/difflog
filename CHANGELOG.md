@@ -4,20 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## v1.0.1 — 2026-03-16
 
+### ⚠️ Breaking Changes
+None.
+
 ### ✨ Features
-- Introduced a Cloudflare Worker for license validation and integrated real validation within the Action, enhancing the security and reliability of license checks.
-- Added Marketplace branding along with pagination fixes, improved Sentry integration, and a new subscribe page to enhance user experience.
-- Implemented usage logging to the KV store upon successful validation and created a stub for the Resend email hook during checkout, improving tracking and communication.
-- Connected Stripe payment links to pricing cards and the subscribe page, simplifying the payment process for users.
-- Enabled email delivery for license keys through Resend, streamlining the distribution of licenses to users.
+- Introduced a Cloudflare Worker for license validation, enhancing the Action with real validation capabilities. 
+- Added usage logging to the KV on successful validation and set up a stub for the Resend email hook during checkout.
+- Integrated Stripe payment links with the pricing cards and subscribe page, streamlining the payment process.
+- Implemented email delivery for license keys via the Resend service.
+- Enhanced the Marketplace with branding updates and pagination fixes, along with the addition of a subscribe page.
 
 ### 🐛 Bug Fixes
-- Hardened error handling mechanisms throughout the application, added a license skeleton, and improved overall test coverage to ensure robustness and reliability.
-
+- Improved error handling throughout the application, ensuring a more robust user experience.
+- Replaced the internal email address with hello@difflog.io across all pages to ensure consistent communication.
+  
 ### 🔧 Chores & Maintenance
-- Added a comprehensive README with usage instructions to assist users in navigating the project.
-- Restored the README.md and docs/CNAME files that were inadvertently dropped in a previous push, ensuring all documentation is intact.
-- Updated the privacy policy and terms of service to reflect current practices and legal requirements.
-- Added a refund policy to the terms of service, providing clarity on user rights.
-- Established a Jest test suite and fortified the Action against edge cases, enhancing the testing framework for future development.
-- Updated the Worker configuration with the actual KV ID and the api.difflog.io route to ensure proper functionality.
+- Restored the README.md and docs/CNAME files that were accidentally dropped in a previous push.
+- Added a privacy policy and terms of service to the documentation.
+- Included a refund policy in the terms of service for better clarity.
+- Established a Jest test suite to improve code quality and coverage, particularly focusing on edge cases.
+- Updated the Worker configuration with the real KV ID and the api.difflog.io route for better functionality.
