@@ -2,12 +2,16 @@ name = "difflog-license"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
+routes = [
+  { pattern = "api.difflog.io/*", zone_name = "difflog.io" }
+]
+
 # Workers free tier handles 100,000 requests/day — plenty for license validation.
 # Upgrade to paid ($5/mo) if you hit limits.
 
 [[kv_namespaces]]
 binding = "LICENSES"
-id = "PLACEHOLDER_KV_ID"
+id = "77ef1f756f5f49379edda51041a47850"
 # Replace with real ID after running: wrangler kv namespace create LICENSES
 
 # Secrets — set via CLI, never in this file:
