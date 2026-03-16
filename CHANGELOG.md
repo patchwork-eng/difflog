@@ -5,18 +5,19 @@ All notable changes to this project will be documented in this file.
 ## v1.0.1 — 2026-03-16
 
 ### ✨ Features
-- A new Cloudflare Worker has been added for license validation, which is now integrated into the Action for real-time validation.
-- Marketplace branding has been improved, along with a pagination fix, the addition of Sentry for error tracking, and a new subscribe page.
-- Usage logging has been implemented for the KV store on successful validation, along with a stub for the Resend email hook during checkout.
-- Stripe payment links have been wired to the pricing cards and the subscribe page, enhancing the payment process for users.
+- Introduced a Cloudflare Worker for license validation and integrated real validation within the Action, enhancing the security and reliability of license checks.
+- Added Marketplace branding along with pagination fixes, improved Sentry integration, and a new subscribe page to enhance user experience.
+- Implemented usage logging to the KV store upon successful validation and created a stub for the Resend email hook during checkout, improving tracking and communication.
+- Connected Stripe payment links to pricing cards and the subscribe page, simplifying the payment process for users.
+- Enabled email delivery for license keys through Resend, streamlining the distribution of licenses to users.
 
 ### 🐛 Bug Fixes
-- Error handling has been hardened, and improvements have been made to the overall test coverage of the application.
+- Hardened error handling mechanisms throughout the application, added a license skeleton, and improved overall test coverage to ensure robustness and reliability.
 
 ### 🔧 Chores & Maintenance
-- A README file has been added, providing usage instructions for users.
-- The landing page for difflog.io has been created and is now hosted via GitHub Pages.
-- The privacy policy and terms of service documents have been updated, including a new refund policy.
-- The Worker configuration has been updated with the real KV ID and the api.difflog.io route.
-- A Jest test suite has been added to ensure better coverage and to harden the Action against edge cases.
-- The license skeleton has been added to the project.
+- Added a comprehensive README with usage instructions to assist users in navigating the project.
+- Restored the README.md and docs/CNAME files that were inadvertently dropped in a previous push, ensuring all documentation is intact.
+- Updated the privacy policy and terms of service to reflect current practices and legal requirements.
+- Added a refund policy to the terms of service, providing clarity on user rights.
+- Established a Jest test suite and fortified the Action against edge cases, enhancing the testing framework for future development.
+- Updated the Worker configuration with the actual KV ID and the api.difflog.io route to ensure proper functionality.
