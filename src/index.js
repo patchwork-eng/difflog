@@ -200,7 +200,7 @@ async function checkLicense(octokit, owner, repo, licenseKey) {
   }
 
   // Validate license key against the Difflog license Worker
-  const WORKER_URL = 'https://difflog-license.patchwork-eng.workers.dev/validate';
+  const WORKER_URL = 'https://api.difflog.io/validate';
   const githubUsername = owner; // The repo owner is the license holder
 
   try {
