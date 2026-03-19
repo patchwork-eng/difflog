@@ -29,7 +29,7 @@ const HARD_COMMIT_LIMIT = 200;
  * Applies a hard cap of HARD_COMMIT_LIMIT (200), then maxCommits.
  */
 function filterCommits(commits, maxCommits = 50) {
-  const BOT_PATTERN = /\[bot\]|dependabot|github-actions/i;
+  const BOT_PATTERN = /\[bot\]|dependabot|github-actions|renovate|greenkeeper|snyk-bot/i;
   const MERGE_PATTERN = /^Merge (pull request|branch|remote)/i;
 
   let filtered = commits.filter(c => {
@@ -151,16 +151,29 @@ async function callOpenAIWithRetry(openai, model, systemPrompt, userPrompt, maxR
       await new Promise(r => setTimeout(r, delayMs * attempt));
     }
     try {
-      const response = await openai.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 1500,
-      });
-      return response.choices[0].message.content.trim();
+      // 30-second timeout — prevents hanging the job if OpenAI is slow
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      let response;
+      try {
+        response = await openai.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 1500,
+          },
+          { signal: controller.signal }
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+      const content = response.choices?.[0]?.message?.content?.trim();
+      if (!content) throw new Error('OpenAI returned an empty response (possible content filter or billing issue).');
+      return content;
     } catch (err) {
       lastErr = err;
       core.warning(`OpenAI API error (attempt ${attempt + 1}): ${err.message}`);

@@ -630,11 +630,22 @@ describe('/webhook/stripe — signature verification', () => {
     const body = JSON.stringify(session);
     const sig = await computeStripeSig(body, 'whsec_test', ts);
 
-    // Mock fetch for Resend email
+    // Mock fetch — handles both Stripe line_items API and Resend email
     const origFetch = global.fetch;
-    const mockFetch = jest.fn().mockResolvedValue({
-      ok: true,
-      text: async () => 'ok',
+    const mockFetch = jest.fn().mockImplementation((url) => {
+      if (url && url.includes('stripe.com')) {
+        // Stripe line_items fetch — return empty data (price ID comes from metadata fallback)
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ data: [] }),
+        });
+      }
+      // Resend email
+      return Promise.resolve({
+        ok: true,
+        text: async () => 'ok',
+        json: async () => ({ id: 'resend_ok' }),
+      });
     });
     global.fetch = mockFetch;
 
@@ -666,13 +677,13 @@ describe('/webhook/stripe — signature verification', () => {
     expect(emailBody.to).toContain('bob@example.com');
   });
 
-  test('checkout.session.completed missing github_username → 400', async () => {
+  test('checkout.session.completed missing github_username — still creates license key (payment links do not supply username)', async () => {
     const ts = Math.floor(Date.now() / 1000);
     const session = {
       type: 'checkout.session.completed',
       data: {
         object: {
-          metadata: { plan: 'indie' }, // missing github_username
+          metadata: { plan: 'indie' }, // no github_username — normal for payment links
           customer: 'cus_999',
           customer_details: { email: null },
         },
@@ -681,6 +692,7 @@ describe('/webhook/stripe — signature verification', () => {
     const body = JSON.stringify(session);
     const sig = await computeStripeSig(body, 'whsec_test', ts);
 
+    const kv = makeKV();
     const req = new Request('https://difflog-license.workers.dev/webhook/stripe', {
       method: 'POST',
       headers: {
@@ -689,10 +701,12 @@ describe('/webhook/stripe — signature verification', () => {
       },
       body,
     });
-    const res = await worker.fetch(req, makeEnv({ stripeSecret: 'whsec_test' }));
-    expect(res.status).toBe(400);
+    const res = await worker.fetch(req, makeEnv({ kv, stripeSecret: 'whsec_test' }));
+    expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.error).toContain('github_username');
+    expect(data.success).toBe(true);
+    expect(data.license_key).toMatch(/^difflog_[0-9a-f]{32}$/);
+    expect(kv.put).toHaveBeenCalled();
   });
 
   test('checkout.session.completed no customer email — skips email, still creates license', async () => {

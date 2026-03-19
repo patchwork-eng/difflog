@@ -419,22 +419,24 @@ describe('prependChangelog — additional corner cases', () => {
 // ─── callOpenAIWithRetry — additional edge cases ──────────────────────────────
 
 describe('callOpenAIWithRetry — additional corner cases', () => {
-  test('empty string response — trimmed to empty string', async () => {
+  test('empty string response — throws empty response error', async () => {
     const mockCreate = jest.fn().mockResolvedValue({
       choices: [{ message: { content: '' } }],
     });
     const mockOpenai = { chat: { completions: { create: mockCreate } } };
-    const result = await callOpenAIWithRetry(mockOpenai, 'gpt-4o-mini', 'sys', 'user', 0, 0);
-    expect(result).toBe('');
+    await expect(
+      callOpenAIWithRetry(mockOpenai, 'gpt-4o-mini', 'sys', 'user', 0, 0)
+    ).rejects.toThrow('OpenAI returned an empty response');
   });
 
-  test('whitespace-only response — trimmed to empty string', async () => {
+  test('whitespace-only response — throws empty response error', async () => {
     const mockCreate = jest.fn().mockResolvedValue({
       choices: [{ message: { content: '   \n\n   ' } }],
     });
     const mockOpenai = { chat: { completions: { create: mockCreate } } };
-    const result = await callOpenAIWithRetry(mockOpenai, 'gpt-4o-mini', 'sys', 'user', 0, 0);
-    expect(result).toBe('');
+    await expect(
+      callOpenAIWithRetry(mockOpenai, 'gpt-4o-mini', 'sys', 'user', 0, 0)
+    ).rejects.toThrow('OpenAI returned an empty response');
   });
 
   test('null choices — throws error', async () => {
