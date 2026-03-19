@@ -8,7 +8,7 @@ branding:
 
 inputs:
   openai_key:
-    description: "OpenAI API key. Required for private repos. Public repos may use the shared key."
+    description: "Your OpenAI API key. Required for all repos. Add it as a GitHub secret and pass it via this input."
     required: true
   model:
     description: "OpenAI model to use for changelog generation"
