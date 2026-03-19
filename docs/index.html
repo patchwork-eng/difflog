@@ -615,6 +615,79 @@
       margin-top: 16px;
     }
 
+    /* ── Repo demo ── */
+    .repo-demo-wrap {
+      margin-top: 20px;
+      padding: 18px 20px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .repo-demo-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    .repo-demo-row {
+      display: flex;
+      gap: 8px;
+    }
+    .repo-input {
+      flex: 1;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .repo-input:focus { border-color: var(--green-light); }
+    .repo-input::placeholder { color: var(--text-muted); opacity: 0.6; }
+    .repo-generate-btn {
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .repo-generate-btn:hover { background: var(--green-2); }
+    .repo-generate-btn:disabled { opacity: 0.5; cursor: default; }
+    .repo-demo-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      letter-spacing: 0.3px;
+    }
+    .demo-output-error {
+      color: #f85149;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      font-style: normal;
+    }
+    .demo-output-loading {
+      color: var(--text-muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      font-style: italic;
+    }
+    .demo-output-meta {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       section { padding: 60px 0; }
@@ -759,7 +832,26 @@
         </div>
         <button class="demo-generate-btn" id="demo-btn" onclick="runDemo()">Generate changelog →</button>
         <div class="demo-badge">⚡ Simulated demo · <span>real output looks exactly like this</span></div>
-        <div class="demo-teaser">🔜 Try it on a real GitHub repo — coming soon</div>
+
+        <!-- Live GitHub repo demo -->
+        <div class="repo-demo-wrap">
+          <div class="repo-demo-label">Or try it on a real GitHub repo:</div>
+          <div class="repo-demo-row">
+            <input
+              type="text"
+              id="repo-input"
+              class="repo-input"
+              placeholder="facebook/react"
+              value="facebook/react"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+            <button class="repo-generate-btn" id="repo-btn" onclick="runRepoDemo()">Generate →</button>
+          </div>
+          <div class="repo-demo-hint">Works on any public repo · paste a full URL or owner/repo</div>
+        </div>
       </div>
 
       <div class="demo-right-col">
@@ -1117,6 +1209,94 @@
       setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
     });
   }
+
+  // ── Live GitHub repo demo ─────────────────────────────────────────────────
+
+  function parseRepoInput(raw) {
+    raw = raw.trim();
+    // Handle full GitHub URLs: https://github.com/owner/repo or github.com/owner/repo
+    const urlMatch = raw.match(/(?:https?:\/\/)?github\.com\/([^\/\s]+)\/([^\/\s#?]+)/i);
+    if (urlMatch) return { owner: urlMatch[1], repo: urlMatch[2].replace(/\.git$/, '') };
+    // Handle owner/repo
+    const slashMatch = raw.match(/^([^\/\s]+)\/([^\/\s]+)$/);
+    if (slashMatch) return { owner: slashMatch[1], repo: slashMatch[2].replace(/\.git$/, '') };
+    return null;
+  }
+
+  function renderMarkdown(text) {
+    // Simple markdown → HTML for the output panel
+    const lines = text.split('\n');
+    return lines.map(line => {
+      if (/^## /.test(line)) return `<span class="m-h2">${esc(line)}</span>`;
+      if (/^### /.test(line)) return `<span class="m-h3">${esc(line)}</span>`;
+      if (/^[-*] /.test(line)) {
+        return `<span class="m-bullet">-</span><span class="m-li"> ${esc(line.replace(/^[-*] /, ''))}</span>`;
+      }
+      if (line.trim() === '') return '';
+      return `<span class="m-li">${esc(line)}</span>`;
+    }).join('\n');
+  }
+
+  async function runRepoDemo() {
+    const inputEl = document.getElementById('repo-input');
+    const btn = document.getElementById('repo-btn');
+    const output = document.getElementById('demo-output');
+    const postOutput = document.getElementById('demo-post-output');
+
+    const parsed = parseRepoInput(inputEl.value);
+    if (!parsed) {
+      output.innerHTML = '<span class="demo-output-error">Please enter a valid owner/repo or GitHub URL.</span>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    postOutput.style.display = 'none';
+
+    // Loading state 1
+    output.innerHTML = '<span class="demo-output-loading">⏳ Fetching commits from GitHub...</span>';
+
+    // Tiny delay so users see the first loading state
+    await new Promise(r => setTimeout(r, 600));
+    output.innerHTML = '<span class="demo-output-loading">✨ Generating changelog with GPT-4o mini...</span>';
+
+    let data;
+    try {
+      const res = await fetch('https://api.difflog.io/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: parsed.owner, repo: parsed.repo }),
+      });
+      data = await res.json();
+    } catch (err) {
+      output.innerHTML = '<span class="demo-output-error">Network error — check your connection and try again.</span>';
+      btn.disabled = false;
+      btn.textContent = 'Generate →';
+      return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Generate →';
+
+    if (!data.success) {
+      output.innerHTML = `<span class="demo-output-error">${esc(data.error || 'Something went wrong.')}</span>`;
+      return;
+    }
+
+    // Render the changelog
+    const html = renderMarkdown(data.changelog);
+    const meta = `<span class="demo-output-meta">↑ ${data.commit_count} commits from ${esc(data.repo)} · Generated by Difflog</span>`;
+    output.innerHTML = html + '\n' + meta;
+    output.dataset.plaintext = data.changelog;
+
+    postOutput.style.display = 'flex';
+  }
+
+  // Allow Enter key in repo input
+  document.addEventListener('DOMContentLoaded', () => {
+    const ri = document.getElementById('repo-input');
+    if (ri) ri.addEventListener('keydown', e => { if (e.key === 'Enter') runRepoDemo(); });
+  });
 </script>
 
 </body>

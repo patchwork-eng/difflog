@@ -4,14 +4,19 @@
  * Routes:
  *   POST /validate          — validate a license key + GitHub username pair
  *   POST /webhook/stripe    — handle Stripe subscription events
+ *   POST /demo              — generate a changelog from a public GitHub repo
  *   GET  /health            — liveness check
  *
  * KV schema (binding: LICENSES):
  *   key:   license_key  (e.g. "difflog_abc123...")
  *   value: JSON string  { github_username, plan, stripe_customer_id, created_at }
  *
+ *   key:   demo_ratelimit_{ip}
+ *   value: JSON string  { count, reset_at }
+ *
  * Required env vars (set in Cloudflare dashboard):
  *   STRIPE_WEBHOOK_SECRET   — from Stripe Dashboard -> Webhooks -> signing secret
+ *   OPENAI_API_KEY          — for the /demo endpoint
  */
 
 // --- Helpers ------------------------------------------------------------------
@@ -67,11 +72,23 @@ async function verifyStripeSignature(body, signatureHeader, secret) {
   return signatures.some(s => s === expectedHex);
 }
 
-function jsonResponse(data, status = 200) {
+function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
   });
+}
+
+/** Build CORS headers for the /demo endpoint */
+function corsHeaders(origin) {
+  const allowed = ['https://difflog.io', 'https://patchwork-eng.github.io'];
+  const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
 }
 
 // --- Email helpers ------------------------------------------------------------
@@ -327,6 +344,168 @@ function handleHealth() {
   });
 }
 
+/** POST /demo */
+async function handleDemo(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const cors = corsHeaders(origin);
+
+  // Parse body
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400, cors);
+  }
+
+  const { owner, repo } = body;
+  if (!owner || !repo) {
+    return jsonResponse({ success: false, error: 'Missing owner or repo.' }, 400, cors);
+  }
+
+  // Sanitize
+  const safeOwner = String(owner).replace(/[^a-zA-Z0-9\-_.]/g, '').slice(0, 100);
+  const safeRepo  = String(repo).replace(/[^a-zA-Z0-9\-_.]/g, '').slice(0, 100);
+
+  // --- IP-based rate limiting (max 5/hour) ---
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+  const rlKey = `demo_ratelimit_${ip}`;
+  const LIMIT = 5;
+  const WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+  try {
+    const rlRaw = await env.LICENSES.get(rlKey);
+    const now = Date.now();
+    let rl = rlRaw ? JSON.parse(rlRaw) : { count: 0, reset_at: now + WINDOW_MS };
+
+    if (now > rl.reset_at) {
+      rl = { count: 0, reset_at: now + WINDOW_MS };
+    }
+
+    if (rl.count >= LIMIT) {
+      return jsonResponse({
+        success: false,
+        error: 'Rate limit: 5 demos per hour. Come back later or install Difflog in your repo.',
+      }, 429, cors);
+    }
+
+    rl.count++;
+    // Store with TTL slightly beyond the window
+    const ttlSeconds = Math.ceil((rl.reset_at - now) / 1000) + 10;
+    await env.LICENSES.put(rlKey, JSON.stringify(rl), { expirationTtl: ttlSeconds });
+  } catch (err) {
+    // Non-fatal: if KV fails, allow the request through
+    console.error('Rate limit KV error:', err);
+  }
+
+  // --- Fetch commits from GitHub ---
+  let commits;
+  try {
+    const ghRes = await fetch(
+      `https://api.github.com/repos/${safeOwner}/${safeRepo}/commits?per_page=20`,
+      { headers: { 'User-Agent': 'difflog-demo/1.0' } }
+    );
+
+    if (ghRes.status === 404) {
+      return jsonResponse({ success: false, error: 'Repository not found or is private.' }, 200, cors);
+    }
+    if (ghRes.status === 403 || ghRes.status === 429) {
+      return jsonResponse({ success: false, error: 'GitHub API rate limit hit. Try again in a minute.' }, 200, cors);
+    }
+    if (!ghRes.ok) {
+      return jsonResponse({ success: false, error: 'Repository not found or is private.' }, 200, cors);
+    }
+
+    commits = await ghRes.json();
+  } catch (err) {
+    console.error('GitHub fetch error:', err);
+    return jsonResponse({ success: false, error: 'Could not reach GitHub. Try again.' }, 200, cors);
+  }
+
+  if (!Array.isArray(commits) || commits.length === 0) {
+    return jsonResponse({ success: false, error: 'No commits found in this repository.' }, 200, cors);
+  }
+
+  // --- Filter merge and bot commits ---
+  const botPatterns = /\[bot\]|dependabot|renovate|greenkeeper|snyk-bot/i;
+  const mergePattern = /^Merge (pull request|branch|remote-tracking|tag)/i;
+
+  const filtered = commits.filter(c => {
+    const msg = c.commit?.message || '';
+    const author = c.commit?.author?.name || '';
+    const login = c.author?.login || '';
+
+    if (mergePattern.test(msg)) return false;
+    if (botPatterns.test(author) || botPatterns.test(login)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    return jsonResponse({ success: false, error: 'No commits found in this repository.' }, 200, cors);
+  }
+
+  // --- Build OpenAI prompt ---
+  const commitList = filtered.map(c => {
+    const sha = (c.sha || '').slice(0, 7);
+    const msg = (c.commit?.message || '').split('\n')[0].trim();
+    const author = c.commit?.author?.name || 'unknown';
+    return `${sha} ${msg} (${author})`;
+  }).join('\n');
+
+  // --- Call OpenAI ---
+  if (!env.OPENAI_API_KEY) {
+    console.error('OPENAI_API_KEY not configured');
+    return jsonResponse({ success: false, error: 'Could not generate changelog. Try again.' }, 200, cors);
+  }
+
+  let changelog;
+  try {
+    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 800,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a technical writer. Given these git commits, write a clean, human-readable changelog section. Group into Features, Bug Fixes, and Maintenance. Use ## vNext as the heading. Write in clear prose — not raw commit messages.',
+          },
+          {
+            role: 'user',
+            content: `Here are the recent commits for ${safeOwner}/${safeRepo}:\n\n${commitList}`,
+          },
+        ],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errBody = await aiRes.text();
+      console.error('OpenAI error:', aiRes.status, errBody);
+      return jsonResponse({ success: false, error: 'Could not generate changelog. Try again.' }, 200, cors);
+    }
+
+    const aiData = await aiRes.json();
+    changelog = aiData.choices?.[0]?.message?.content?.trim();
+
+    if (!changelog) {
+      return jsonResponse({ success: false, error: 'Could not generate changelog. Try again.' }, 200, cors);
+    }
+  } catch (err) {
+    console.error('OpenAI fetch error:', err);
+    return jsonResponse({ success: false, error: 'Could not generate changelog. Try again.' }, 200, cors);
+  }
+
+  return jsonResponse({
+    success: true,
+    changelog,
+    repo: `${safeOwner}/${safeRepo}`,
+    commit_count: filtered.length,
+  }, 200, cors);
+}
+
 // --- Main fetch handler -------------------------------------------------------
 
 export default {
@@ -334,9 +513,16 @@ export default {
     const url = new URL(request.url);
     const method = request.method;
     const pathname = url.pathname;
+    const origin = request.headers.get('Origin') || '';
 
     // CORS preflight
     if (method === 'OPTIONS') {
+      if (pathname === '/demo') {
+        return new Response(null, {
+          status: 204,
+          headers: corsHeaders(origin),
+        });
+      }
       return new Response(null, {
         status: 204,
         headers: {
@@ -357,6 +543,10 @@ export default {
 
     if (pathname === '/webhook/stripe' && method === 'POST') {
       return handleStripeWebhook(request, env);
+    }
+
+    if (pathname === '/demo' && method === 'POST') {
+      return handleDemo(request, env);
     }
 
     return jsonResponse({ error: 'Not found.' }, 404);
