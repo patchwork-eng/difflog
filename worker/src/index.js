@@ -21,9 +21,11 @@
  *   OPENAI_API_KEY          — for the /demo endpoint
  */
 
-// --- AutoPR Stripe price IDs (live) ------------------------------------------
-const AUTOPR_INDIE_PRICE_ID  = 'price_1TCX6u0p242H3IUdhCRoCtWo';
-const AUTOPR_TEAMS_PRICE_ID  = 'price_1TCX6v0p242H3IUdM0pSptgu';
+// --- Stripe price IDs (live) --------------------------------------------------
+const AUTOPR_INDIE_PRICE_ID   = 'price_1TCX6u0p242H3IUdhCRoCtWo';
+const AUTOPR_TEAMS_PRICE_ID   = 'price_1TCX6v0p242H3IUdM0pSptgu';
+const DIFFLOG_INDIE_PRICE_ID  = 'price_1TCT6H0p242H3IUdyyGsOEpf';
+const DIFFLOG_TEAMS_PRICE_ID  = 'price_1TCT6I0p242H3IUd5og0nTlm';
 
 // --- Helpers ------------------------------------------------------------------
 
@@ -148,25 +150,34 @@ async function sendLicenseKeyEmail(email, licenseKey, plan, env, isAutopr = fals
     </div>
   `;
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [email],
-      subject: `Your ${productName} ${planLabel} license key`,
-      html,
-    }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [email],
+        subject: `Your ${productName} ${planLabel} license key`,
+        html,
+      }),
+    });
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error('Resend error:', res.status, errBody);
-  } else {
-    console.log(`${productName} license key email sent to ${email}`);
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error('Resend error:', res.status, errBody);
+    } else {
+      console.log(`${productName} license key email sent to ${email}`);
+    }
+  } catch (err) {
+    console.error('Resend fetch error (may have timed out):', err);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -269,8 +280,9 @@ async function handleValidate(request, env) {
     return jsonResponse({ valid: false, plan: null, message: 'License validation service error.' }, 500);
   }
 
-  // Username check
-  if (entry.github_username !== github_username) {
+  // Username check — only enforced if the license was created with a username
+  // (payment link purchases don't capture github_username, so skip the check for those)
+  if (entry.github_username && entry.github_username !== github_username) {
     return jsonResponse({
       valid: false,
       plan: null,
@@ -304,8 +316,39 @@ async function handleValidate(request, env) {
   });
 }
 
+/**
+ * Fetch line items for a Stripe checkout session.
+ * Returns the first price ID found, or null.
+ */
+async function fetchSessionPriceId(sessionId, stripeSecretKey) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${sessionId}/line_items?limit=5`,
+        {
+          signal: controller.signal,
+          headers: { 'Authorization': `Bearer ${stripeSecretKey}` },
+        }
+      );
+      if (!res.ok) {
+        console.error('Stripe line_items fetch error:', res.status);
+        return null;
+      }
+      const data = await res.json();
+      return data.data?.[0]?.price?.id ?? null;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    console.error('fetchSessionPriceId error:', err);
+    return null;
+  }
+}
+
 /** POST /webhook/stripe */
-async function handleStripeWebhook(request, env) {
+async function handleStripeWebhook(request, env, ctx) {
   const signature = request.headers.get('stripe-signature');
   const body = await request.text();
 
@@ -334,70 +377,77 @@ async function handleStripeWebhook(request, env) {
   try {
     if (eventType === 'checkout.session.completed') {
       const session = event.data.object;
-
-      // Expects metadata: { github_username, plan } set during checkout session creation
-      const githubUsername = session.metadata && session.metadata.github_username;
-      const plan = (session.metadata && session.metadata.plan) || 'indie';
       const stripeCustomerId = session.customer;
       const customerEmail = session.customer_details && session.customer_details.email;
 
-      // Determine if this is an AutoPR purchase by checking the price ID
-      const lineItems = session.line_items;
-      let priceId = session.metadata && session.metadata.price_id;
+      // --- Determine product from actual price ID (not metadata) ---
+      // Stripe payment links don't populate session.metadata.price_id automatically.
+      // Fetch line items from the Stripe API to get the real price ID.
+      let priceId = null;
+      if (env.STRIPE_SECRET_KEY) {
+        priceId = await fetchSessionPriceId(session.id, env.STRIPE_SECRET_KEY);
+      }
+      // Fallback: check metadata if line item fetch failed
+      if (!priceId) {
+        priceId = session.metadata && session.metadata.price_id;
+      }
+      console.log(`checkout.session.completed: session=${session.id} priceId=${priceId}`);
 
-      // Check if the purchased price is an AutoPR price
-      const isAutopr = [AUTOPR_INDIE_PRICE_ID, AUTOPR_TEAMS_PRICE_ID].includes(priceId) ||
+      // --- Determine plan label from price ID ---
+      const isAutoprIndie  = priceId === AUTOPR_INDIE_PRICE_ID;
+      const isAutoprTeams  = priceId === AUTOPR_TEAMS_PRICE_ID;
+      const isDifflogIndie = priceId === DIFFLOG_INDIE_PRICE_ID;
+      const isDifflogTeams = priceId === DIFFLOG_TEAMS_PRICE_ID;
+      const isAutopr = isAutoprIndie || isAutoprTeams ||
         (session.metadata && session.metadata.product_type === 'autopr');
+      const plan = (isAutoprTeams || isDifflogTeams) ? 'teams' : 'indie';
+
+      // --- Generate license key and store in KV ---
+      let licenseKey, kvKey, product;
 
       if (isAutopr) {
-        // AutoPR purchase — generate autopr_ prefixed key, store under autopr_license_{key}
         const rawKey = generateLicenseKey('autopr');
-        const kvKey = `autopr_license_${rawKey.replace('autopr_', '')}`;
+        kvKey = `autopr_license_${rawKey.replace('autopr_', '')}`;
+        licenseKey = rawKey;
+        product = 'autopr';
         const entry = {
           plan,
           stripe_customer_id: stripeCustomerId,
           created_at: new Date().toISOString(),
+          email: customerEmail || null,
+        };
+        await env.LICENSES.put(kvKey, JSON.stringify(entry));
+        console.log(`AutoPR license created: ${licenseKey} (kv: ${kvKey})`);
+      } else {
+        // Difflog purchase (default for all Difflog price IDs + unknown price IDs)
+        licenseKey = generateLicenseKey('difflog');
+        kvKey = licenseKey;
+        product = 'difflog';
+        const githubUsername = session.metadata && session.metadata.github_username;
+        const entry = {
+          plan,
+          stripe_customer_id: stripeCustomerId,
+          created_at: new Date().toISOString(),
+          email: customerEmail || null,
         };
         if (githubUsername) entry.github_username = githubUsername;
-
         await env.LICENSES.put(kvKey, JSON.stringify(entry));
-        console.log(`AutoPR license created: ${rawKey} (kv: ${kvKey})`);
-
-        if (customerEmail) {
-          await sendLicenseKeyEmail(customerEmail, rawKey, plan, env, true);
-        } else {
-          console.warn('checkout.session.completed (autopr): no customer email found, skipping email');
-        }
-
-        return jsonResponse({ success: true, license_key: rawKey, product: 'autopr' });
+        console.log(`Difflog license created: ${licenseKey}`);
       }
 
-      // Difflog purchase (default)
-      if (!githubUsername) {
-        console.error('checkout.session.completed: missing github_username in metadata');
-        return jsonResponse({ error: 'Missing github_username in session metadata.' }, 400);
-      }
-
-      const licenseKey = generateLicenseKey();
-      const entry = {
-        github_username: githubUsername,
-        plan,
-        stripe_customer_id: stripeCustomerId,
-        created_at: new Date().toISOString(),
-      };
-
-      await env.LICENSES.put(licenseKey, JSON.stringify(entry));
-
-      console.log(`Difflog license created for ${githubUsername}: ${licenseKey}`);
-
-      // Email the license key to the customer via Resend
+      // --- Respond to Stripe immediately, then send email in background ---
       if (customerEmail) {
-        await sendLicenseKeyEmail(customerEmail, licenseKey, plan, env, false);
+        const emailPromise = sendLicenseKeyEmail(customerEmail, licenseKey, plan, env, isAutopr);
+        if (ctx && typeof ctx.waitUntil === 'function') {
+          ctx.waitUntil(emailPromise); // non-blocking in production
+        } else {
+          emailPromise.catch(err => console.error('Email send error:', err)); // test fallback
+        }
       } else {
-        console.warn('checkout.session.completed: no customer email found, skipping license key email');
+        console.warn(`checkout.session.completed (${product}): no customer email, skipping email`);
       }
 
-      return jsonResponse({ success: true, license_key: licenseKey, product: 'difflog' });
+      return jsonResponse({ success: true, license_key: licenseKey, product });
 
     } else if (eventType === 'customer.subscription.deleted') {
       const subscription = event.data.object;
@@ -476,7 +526,7 @@ async function handleDemo(request, env) {
   // --- IP-based rate limiting (max 5/hour) ---
   const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
   const rlKey = `demo_ratelimit_${ip}`;
-  const LIMIT = 5;
+  const LIMIT = 20;
   const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
   try {
@@ -491,7 +541,7 @@ async function handleDemo(request, env) {
     if (rl.count >= LIMIT) {
       return jsonResponse({
         success: false,
-        error: 'Rate limit: 5 demos per hour. Come back later or install Difflog in your repo.',
+        error: 'Rate limit: 20 demos per hour. Come back later or install Difflog in your repo.',
       }, 429, cors);
     }
 
@@ -616,7 +666,7 @@ async function handleDemo(request, env) {
 // --- Main fetch handler -------------------------------------------------------
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const method = request.method;
     const pathname = url.pathname;
@@ -653,7 +703,7 @@ export default {
     }
 
     if (pathname === '/webhook/stripe' && method === 'POST') {
-      return handleStripeWebhook(request, env);
+      return handleStripeWebhook(request, env, ctx);
     }
 
     if (pathname === '/demo' && method === 'POST') {
