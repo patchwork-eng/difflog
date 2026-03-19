@@ -339,6 +339,66 @@
       letter-spacing: 0.5px;
     }
     .demo-badge span { color: var(--green-light); }
+    .demo-right-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .demo-post-output {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .demo-share-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .demo-share-link {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .demo-share-link:hover { border-color: var(--green-light); color: var(--green-light); text-decoration: none; }
+    .demo-share-link.copied { border-color: var(--green-light); color: var(--green-light); }
+    .demo-hook {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .demo-hook p { color: var(--text-muted); font-size: 14px; }
+    .demo-hook-btn {
+      display: inline-block;
+      padding: 9px 18px;
+      background: var(--green);
+      color: #fff;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      transition: background 0.15s;
+      text-align: center;
+    }
+    .demo-hook-btn:hover { background: var(--green-2); text-decoration: none; }
+    .demo-teaser {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
 
     /* ── Pricing ── */
     .plans {
@@ -699,13 +759,27 @@
         </div>
         <button class="demo-generate-btn" id="demo-btn" onclick="runDemo()">Generate changelog →</button>
         <div class="demo-badge">⚡ Simulated demo · <span>real output looks exactly like this</span></div>
+        <div class="demo-teaser">🔜 Try it on a real GitHub repo — coming soon</div>
       </div>
 
-      <div class="demo-panel">
-        <div class="demo-panel-header">
-          <span>CHANGELOG.md — preview</span>
+      <div class="demo-right-col">
+        <div class="demo-panel">
+          <div class="demo-panel-header">
+            <span>CHANGELOG.md — preview</span>
+          </div>
+          <div class="demo-output-body" id="demo-output"><span class="m-empty">Your changelog will appear here.</span></div>
         </div>
-        <div class="demo-output-body" id="demo-output"><span class="m-empty">Your changelog will appear here.</span></div>
+
+        <div id="demo-post-output" style="display:none;" class="demo-post-output">
+          <div class="demo-share-row">
+            <button class="demo-share-link" onclick="copyChangelog(event)">📋 Copy changelog</button>
+            <a class="demo-share-link" href="https://twitter.com/intent/tweet?text=Just%20tried%20%40difflog_io%20%E2%80%94%20it%20generated%20this%20changelog%20from%20my%20commits%20in%20seconds%20%F0%9F%94%A5%20difflog.io" target="_blank" rel="noopener">🐦 Share on X</a>
+          </div>
+          <div class="demo-hook">
+            <p>Want this running in your repo automatically?</p>
+            <a href="#get-started" class="demo-hook-btn">Add to GitHub — takes 2 minutes</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -876,10 +950,142 @@
 
   // ── Simulated changelog demo ──────────────────────────────────────────────
 
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function randomHash() {
+    const chars = '0123456789abcdef';
+    let h = '';
+    for (let i = 0; i < 7; i++) h += chars[Math.floor(Math.random() * 16)];
+    return h;
+  }
+
+  function shouldDrop(raw) {
+    return /^\s*(wip|temp|tmp|hack|fixme|todo|testing|debug|scratch|placeholder)\b/i.test(raw);
+  }
+
+  function rewriteMessage(type, msg) {
+    const lc = s => s.charAt(0).toLowerCase() + s.slice(1);
+    const uc = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const addVerb = Math.random() > 0.45 ? 'Added' : 'Introduced';
+    const fixVerb = Math.random() > 0.45 ? 'Fixed' : 'Resolved';
+
+    msg = msg.replace(/[.;,!]+$/, '').trim();
+
+    switch (type) {
+      case 'feat': {
+        if (/dark.?mode/i.test(msg)) return `${addVerb} a dark mode toggle, respecting system preferences by default`;
+        if (/csv.*export|export.*csv/i.test(msg)) return `${addVerb} CSV export functionality`;
+        if (/monorepo/i.test(msg)) return `${addVerb} monorepo support via the working_directory configuration option`;
+        const stripped = msg.replace(/^(add(s|ed)?|implement(s|ed)?|introduc(e|ed|es)?|creat(e|ed|es)?|support(s|ed)?|allow(s|ed)?|enabl(e|ed|es)?)\s+/i, '').trim();
+        return `${addVerb} ${lc(stripped)}`;
+      }
+      case 'fix': {
+        if (/login.*redirect|redirect.*login/i.test(msg)) return `${fixVerb} an issue where users were incorrectly redirected after logging in`;
+        if (/memory.?leak/i.test(msg)) return `${fixVerb} a memory leak in the chart renderer`;
+        if (/timezone|date.?pick/i.test(msg)) return `${fixVerb} incorrect timezone offset handling in the date picker`;
+        if (/^broken\s+(.+)/i.test(msg)) {
+          const thing = msg.match(/^broken\s+(.+)/i)[1];
+          return `${fixVerb} an issue with ${lc(thing)}`;
+        }
+        const stripped = msg.replace(/^(fix(es|ed)?|correct(s|ed)?|resolv(e|ed|es)?|repair(s|ed)?|address(es|ed)?|patch(es|ed)?)\s+/i, '').trim();
+        return `${fixVerb} ${lc(stripped)}`;
+      }
+      case 'refactor': {
+        if (/auth/i.test(msg)) return 'Refactored authentication flow for improved readability and maintainability';
+        const stripped = msg.replace(/^(refactor(s|ed)?|clean(s|ed)?\s*up|simplif(y|ied|ies)?|reorganiz(e|ed|es)?|restructur(e|ed|es)?)\s+/i, '').trim();
+        return `Refactored ${lc(stripped)} for improved maintainability`;
+      }
+      case 'perf': {
+        const stripped = msg.replace(/^(optimiz(e|ed|es)?|improv(e|ed|es)?|speed\s+up)\s+/i, '').trim();
+        return `Improved performance of ${lc(stripped)}`;
+      }
+      case 'chore': {
+        if (/dep(endenc(y|ies))?|bump/i.test(msg)) return 'Updated project dependencies to latest versions';
+        return uc(msg.replace(/^chore:?\s*/i, ''));
+      }
+      case 'docs': {
+        const forMatch = msg.match(/for\s+(.+)/i);
+        return `Updated documentation${forMatch ? ' for ' + forMatch[1] : ''}`;
+      }
+      default:
+        return uc(msg);
+    }
+  }
+
+  function parseCommits(raw) {
+    return raw.split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(line => {
+        const shaMatch = line.match(/^[0-9a-f]{7,40}\s+/i);
+        const msg = shaMatch ? line.slice(shaMatch[0].length) : line;
+        const ccMatch = msg.match(/^(feat|fix|chore|refactor|docs|style|test|perf|ci|build|revert)(\(.+?\))?!?:\s*(.+)/i);
+        if (ccMatch) {
+          return { type: ccMatch[1].toLowerCase(), message: ccMatch[3].trim(), raw: msg };
+        }
+        let type = 'chore';
+        if (/\badd(ed|s)?\b|\bnew\b|\bintroduc|\bsupport|\bimplement|\bfeature|\ballow|\benable/i.test(msg)) type = 'feat';
+        else if (/\bfix(ed|es)?\b|\bbug\b|\bcorrect|\bpatch|\bresolv|\brepair|\baddress/i.test(msg)) type = 'fix';
+        else if (/\brefactor|\bclean|\bsimplif|\bimprove|\boptimiz|\bperformance|\bspeed/i.test(msg)) type = 'refactor';
+        return { type, message: msg, raw: msg };
+      })
+      .filter(c => !shouldDrop(c.raw));
+  }
+
+  function generateChangelog(raw) {
+    const commits = parseCommits(raw);
+    const today = new Date().toISOString().split('T')[0];
+    const minor = Math.floor(Math.random() * 4) + 2;
+    const patch = Math.floor(Math.random() * 3);
+    const version = `v2.${minor}.${patch}`;
+
+    // Pre-compute prose + hash for each commit (so both outputs are consistent)
+    const enrich = arr => arr.map(c => ({ ...c, prose: rewriteMessage(c.type, c.message), hash: randomHash() }));
+
+    const feats = enrich(commits.filter(c => c.type === 'feat'));
+    const fixes = enrich(commits.filter(c => c.type === 'fix'));
+    const maint = enrich(commits.filter(c => ['chore','refactor','ci','build','docs','style','perf'].includes(c.type)));
+    const fallback = (!feats.length && !fixes.length && !maint.length) ? enrich(commits) : [];
+
+    let plainParts = [`## ${version} — ${today}`, ''];
+    let htmlParts  = [
+      `<span class="m-h2">## ${esc(version)}</span> <span class="m-date">— ${today}</span>`,
+      ''
+    ];
+
+    function addSection(items, mdTitle, htmlTitle) {
+      if (!items.length) return;
+      plainParts.push(mdTitle);
+      htmlParts.push(`<span class="m-h3">${htmlTitle}</span>`);
+      items.forEach(({ prose, hash }) => {
+        plainParts.push(`- ${prose}  ${hash}`);
+        htmlParts.push(`<span class="m-bullet">-</span><span class="m-li"> ${esc(prose)}</span> <span style="color:var(--text-muted);font-size:11px">${hash}</span>`);
+      });
+      plainParts.push('');
+      htmlParts.push('');
+    }
+
+    addSection(feats,    '### ✨ Features',    '### ✨ Features');
+    addSection(fixes,    '### 🐛 Bug Fixes',   '### 🐛 Bug Fixes');
+    addSection(maint,    '### 🔧 Maintenance', '### 🔧 Maintenance');
+    addSection(fallback, '### 🔧 Maintenance', '### 🔧 Maintenance');
+
+    plainParts.push('---', '*Generated by Difflog — difflog.io*');
+    htmlParts.push(
+      `<span style="color:var(--border)">---</span>`,
+      `<span style="color:var(--text-muted);font-style:italic">*Generated by <a href="https://difflog.io" style="color:var(--green-light)">Difflog</a> — difflog.io*</span>`
+    );
+
+    return { html: htmlParts.join('\n'), plainText: plainParts.join('\n') };
+  }
+
   function runDemo() {
     const input = document.getElementById('demo-input').value.trim();
     const output = document.getElementById('demo-output');
     const btn = document.getElementById('demo-btn');
+    const postOutput = document.getElementById('demo-post-output');
 
     if (!input) {
       output.innerHTML = '<span class="m-empty">Paste some commits above first.</span>';
@@ -888,106 +1094,28 @@
 
     btn.disabled = true;
     btn.textContent = 'Generating…';
+    postOutput.style.display = 'none';
 
     setTimeout(() => {
-      const changelog = generateChangelog(input);
-      output.textContent = changelog;
-      colorizeOutput(output);
+      const { html, plainText } = generateChangelog(input);
+      output.innerHTML = html;
+      output.dataset.plaintext = plainText;
+      postOutput.style.display = 'flex';
       btn.disabled = false;
       btn.textContent = 'Generate changelog →';
-    }, 600);
+    }, 800);
   }
 
-  function parseCommits(raw) {
-    return raw.split('\n')
-      .map(l => l.trim())
-      .filter(Boolean)
-      .map(line => {
-        // Strip leading sha (7–40 hex chars) if present
-        const shaMatch = line.match(/^[0-9a-f]{7,40}\s+/i);
-        const msg = shaMatch ? line.slice(shaMatch[0].length) : line;
-
-        // Conventional commit parsing
-        const ccMatch = msg.match(/^(feat|fix|chore|refactor|docs|style|test|perf|ci|build|revert)(\(.+?\))?!?:\s*(.+)/i);
-        if (ccMatch) {
-          return { type: ccMatch[1].toLowerCase(), scope: ccMatch[2] || '', message: ccMatch[3].trim() };
-        }
-
-        // Freeform — infer type by keywords
-        const lower = msg.toLowerCase();
-        let type = 'chore';
-        if (/\badd(ed|s)?\b|\bnew\b|\bintroduc|\bsupport|\bimplement|\bfeature|\ballow|\benable/i.test(msg)) type = 'feat';
-        else if (/\bfix(ed|es)?\b|\bbug\b|\bcorrect|\bpatch|\bresolv|\brepair|\baddress/i.test(msg)) type = 'fix';
-        else if (/\brefactor|\bclean|\bsimplif|\bimprove|\boptimiz|\bperformance|\bspeed/i.test(msg)) type = 'refactor';
-
-        return { type, scope: '', message: capitalise(msg) };
-      });
-  }
-
-  function capitalise(s) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
-  // Make messages read more naturally — strip trailing punctuation noise, capitalise
-  function polish(msg) {
-    return capitalise(msg.replace(/[.;,]+$/, '').trim());
-  }
-
-  function generateChangelog(raw) {
-    const commits = parseCommits(raw);
-    const today = new Date().toISOString().split('T')[0];
-
-    const feats = commits.filter(c => c.type === 'feat');
-    const fixes = commits.filter(c => c.type === 'fix');
-    const chores = commits.filter(c => ['chore', 'refactor', 'ci', 'build', 'docs', 'style', 'test', 'perf'].includes(c.type));
-
-    let out = `## [Unreleased] — ${today}\n`;
-
-    if (feats.length) {
-      out += `\n### ✨ Features\n`;
-      feats.forEach(c => {
-        out += `- ${polish(c.message)}\n`;
-      });
-    }
-
-    if (fixes.length) {
-      out += `\n### 🐛 Bug Fixes\n`;
-      fixes.forEach(c => {
-        out += `- ${polish(c.message)}\n`;
-      });
-    }
-
-    if (chores.length) {
-      out += `\n### 🔧 Chores & Maintenance\n`;
-      chores.forEach(c => {
-        out += `- ${polish(c.message)}\n`;
-      });
-    }
-
-    if (!feats.length && !fixes.length && !chores.length) {
-      out += `\n### 🔧 Chores & Maintenance\n`;
-      commits.forEach(c => { out += `- ${polish(c.message)}\n`; });
-    }
-
-    out += `\n---\n*Generated by [Difflog](https://difflog.io)*`;
-    return out;
-  }
-
-  function colorizeOutput(el) {
-    // Apply simple syntax highlighting matching the page's markdown color scheme
-    const lines = el.textContent.split('\n');
-    el.innerHTML = lines.map(line => {
-      if (/^## /.test(line))  return `<span class="m-h2">${esc(line)}</span>`;
-      if (/^### /.test(line)) return `<span class="m-h3">${esc(line)}</span>`;
-      if (/^---/.test(line))  return `<span style="color:var(--border)">${esc(line)}</span>`;
-      if (/^\*Generated/.test(line)) return `<span style="color:var(--text-muted);font-style:italic">${esc(line)}</span>`;
-      if (/^- /.test(line))  return `<span class="m-bullet">-</span><span class="m-li">${esc(line.slice(1))}</span>`;
-      return `<span style="color:var(--text-muted)">${esc(line)}</span>`;
-    }).join('\n');
-  }
-
-  function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function copyChangelog(event) {
+    const output = document.getElementById('demo-output');
+    const text = output.dataset.plaintext || output.innerText;
+    const btn = event.currentTarget;
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+    });
   }
 </script>
 
