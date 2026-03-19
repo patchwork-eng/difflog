@@ -402,7 +402,7 @@ async function handleDemo(request, env) {
   try {
     const ghRes = await fetch(
       `https://api.github.com/repos/${safeOwner}/${safeRepo}/commits?per_page=20`,
-      { headers: { 'User-Agent': 'difflog-demo/1.0', ...(env.GITHUB_TOKEN ? { 'Authorization': `token ${env.GITHUB_TOKEN}` } : {}) } }
+      { headers: { 'User-Agent': 'difflog-demo/1.0' } }
     );
 
     if (ghRes.status === 404) {
