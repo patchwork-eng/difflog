@@ -245,6 +245,101 @@
     .m-code    { color: #ffa657; }
     .m-date    { color: #6e7681; }
 
+    /* ── Demo ── */
+    .demo-section { }
+    .demo-intro {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 28px;
+      line-height: 1.7;
+    }
+    .demo-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 720px) {
+      .demo-layout { grid-template-columns: 1fr; }
+    }
+    .demo-panel {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .demo-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-3);
+    }
+    .demo-panel-header span {
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .demo-panel textarea {
+      width: 100%;
+      min-height: 220px;
+      background: var(--bg-2);
+      border: none;
+      outline: none;
+      resize: vertical;
+      color: var(--text);
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .demo-panel textarea::placeholder { color: var(--text-muted); opacity: 0.55; }
+    .demo-generate-btn {
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+      padding: 11px 0;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+      letter-spacing: 0.2px;
+    }
+    .demo-generate-btn:hover { background: var(--green-2); }
+    .demo-generate-btn:disabled { opacity: 0.5; cursor: default; }
+    .demo-output-body {
+      min-height: 220px;
+      padding: 16px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.75;
+      color: #adbac7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .demo-output-body .m-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+    }
+    .demo-badge {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 11px;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+    .demo-badge span { color: var(--green-light); }
+
     /* ── Pricing ── */
     .plans {
       display: grid;
@@ -587,6 +682,35 @@
   </div>
 </section>
 
+<!-- ══ DEMO ══ -->
+<section class="demo-section">
+  <div class="container">
+    <div class="section-label">// try it now</div>
+    <h2>See what Difflog does to your commits.</h2>
+    <p class="demo-intro">Paste your <code class="inline-code">git log --oneline</code> output below and hit Generate. No sign-up, no API key — this runs entirely in your browser.</p>
+
+    <div class="demo-layout">
+      <div>
+        <div class="demo-panel">
+          <div class="demo-panel-header">
+            <span>git log --oneline</span>
+          </div>
+          <textarea id="demo-input" placeholder="Paste commits here, e.g.:&#10;&#10;a1b2c3d feat: add dark mode toggle&#10;e4f5a6b fix: correct timezone offset in date picker&#10;7c8d9e0 chore: bump dependencies&#10;1a2b3c4 feat: export to CSV&#10;5d6e7f8 fix: memory leak in chart renderer&#10;9a0b1c2 refactor: simplify auth middleware"></textarea>
+        </div>
+        <button class="demo-generate-btn" id="demo-btn" onclick="runDemo()">Generate changelog →</button>
+        <div class="demo-badge">⚡ Simulated demo · <span>real output looks exactly like this</span></div>
+      </div>
+
+      <div class="demo-panel">
+        <div class="demo-panel-header">
+          <span>CHANGELOG.md — preview</span>
+        </div>
+        <div class="demo-output-body" id="demo-output"><span class="m-empty">Your changelog will appear here.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ══ PRICING ══ -->
 <section>
   <div class="container">
@@ -748,6 +872,122 @@
       btn.classList.add('copied');
       setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
     });
+  }
+
+  // ── Simulated changelog demo ──────────────────────────────────────────────
+
+  function runDemo() {
+    const input = document.getElementById('demo-input').value.trim();
+    const output = document.getElementById('demo-output');
+    const btn = document.getElementById('demo-btn');
+
+    if (!input) {
+      output.innerHTML = '<span class="m-empty">Paste some commits above first.</span>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+
+    setTimeout(() => {
+      const changelog = generateChangelog(input);
+      output.textContent = changelog;
+      colorizeOutput(output);
+      btn.disabled = false;
+      btn.textContent = 'Generate changelog →';
+    }, 600);
+  }
+
+  function parseCommits(raw) {
+    return raw.split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(line => {
+        // Strip leading sha (7–40 hex chars) if present
+        const shaMatch = line.match(/^[0-9a-f]{7,40}\s+/i);
+        const msg = shaMatch ? line.slice(shaMatch[0].length) : line;
+
+        // Conventional commit parsing
+        const ccMatch = msg.match(/^(feat|fix|chore|refactor|docs|style|test|perf|ci|build|revert)(\(.+?\))?!?:\s*(.+)/i);
+        if (ccMatch) {
+          return { type: ccMatch[1].toLowerCase(), scope: ccMatch[2] || '', message: ccMatch[3].trim() };
+        }
+
+        // Freeform — infer type by keywords
+        const lower = msg.toLowerCase();
+        let type = 'chore';
+        if (/\badd(ed|s)?\b|\bnew\b|\bintroduc|\bsupport|\bimplement|\bfeature|\ballow|\benable/i.test(msg)) type = 'feat';
+        else if (/\bfix(ed|es)?\b|\bbug\b|\bcorrect|\bpatch|\bresolv|\brepair|\baddress/i.test(msg)) type = 'fix';
+        else if (/\brefactor|\bclean|\bsimplif|\bimprove|\boptimiz|\bperformance|\bspeed/i.test(msg)) type = 'refactor';
+
+        return { type, scope: '', message: capitalise(msg) };
+      });
+  }
+
+  function capitalise(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // Make messages read more naturally — strip trailing punctuation noise, capitalise
+  function polish(msg) {
+    return capitalise(msg.replace(/[.;,]+$/, '').trim());
+  }
+
+  function generateChangelog(raw) {
+    const commits = parseCommits(raw);
+    const today = new Date().toISOString().split('T')[0];
+
+    const feats = commits.filter(c => c.type === 'feat');
+    const fixes = commits.filter(c => c.type === 'fix');
+    const chores = commits.filter(c => ['chore', 'refactor', 'ci', 'build', 'docs', 'style', 'test', 'perf'].includes(c.type));
+
+    let out = `## [Unreleased] — ${today}\n`;
+
+    if (feats.length) {
+      out += `\n### ✨ Features\n`;
+      feats.forEach(c => {
+        out += `- ${polish(c.message)}\n`;
+      });
+    }
+
+    if (fixes.length) {
+      out += `\n### 🐛 Bug Fixes\n`;
+      fixes.forEach(c => {
+        out += `- ${polish(c.message)}\n`;
+      });
+    }
+
+    if (chores.length) {
+      out += `\n### 🔧 Chores & Maintenance\n`;
+      chores.forEach(c => {
+        out += `- ${polish(c.message)}\n`;
+      });
+    }
+
+    if (!feats.length && !fixes.length && !chores.length) {
+      out += `\n### 🔧 Chores & Maintenance\n`;
+      commits.forEach(c => { out += `- ${polish(c.message)}\n`; });
+    }
+
+    out += `\n---\n*Generated by [Difflog](https://difflog.io)*`;
+    return out;
+  }
+
+  function colorizeOutput(el) {
+    // Apply simple syntax highlighting matching the page's markdown color scheme
+    const lines = el.textContent.split('\n');
+    el.innerHTML = lines.map(line => {
+      if (/^## /.test(line))  return `<span class="m-h2">${esc(line)}</span>`;
+      if (/^### /.test(line)) return `<span class="m-h3">${esc(line)}</span>`;
+      if (/^---/.test(line))  return `<span style="color:var(--border)">${esc(line)}</span>`;
+      if (/^\*Generated/.test(line)) return `<span style="color:var(--text-muted);font-style:italic">${esc(line)}</span>`;
+      if (/^- /.test(line))  return `<span class="m-bullet">-</span><span class="m-li">${esc(line.slice(1))}</span>`;
+      return `<span style="color:var(--text-muted)">${esc(line)}</span>`;
+    }).join('\n');
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 </script>
 
