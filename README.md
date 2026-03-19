@@ -1,6 +1,6 @@
-# difflog
+ï»¿# difflog
 
-> **Generate a human-readable CHANGELOG.md from your git commits GÇö powered by AI.**
+> **Generate a human-readable CHANGELOG.md from your git commits Gï¿½ï¿½ powered by AI.**
 >
 > No templates. No config. Just plug it in and ship.
 
@@ -30,9 +30,9 @@ That's it. difflog will:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `openai_key` | G£à | GÇö | Your OpenAI API key (store as a secret) |
-| `model` | G¥î | `gpt-4o-mini` | OpenAI model to use |
-| `max_commits` | G¥î | `50` | Max commits to analyze |
+| `openai_key` | Yes | â€” | Your OpenAI API key (store as a secret) |
+| `model` | No | `gpt-4o-mini` | OpenAI model to use |
+| `max_commits` | No | `50` | Max commits to analyze |
 
 ---
 
@@ -40,7 +40,7 @@ That's it. difflog will:
 
 1. Add your OpenAI API key as a repo secret named `OPENAI_API_KEY`
 2. Add the action to your workflow (see Usage above)
-3. Push to `main` GÇö your `CHANGELOG.md` will be auto-generated
+3. Push to `main` Gï¿½ï¿½ your `CHANGELOG.md` will be auto-generated
 
 ---
 
