@@ -1,3 +1,4 @@
+account_id = "de3965490f3cd440e915ffab6751d6a5"
 name = "difflog-license"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
@@ -16,3 +17,4 @@ id = "77ef1f756f5f49379edda51041a47850"
 
 # Secrets — set via CLI, never in this file:
 #   wrangler secret put STRIPE_WEBHOOK_SECRET
+

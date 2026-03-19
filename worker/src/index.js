@@ -1,16 +1,18 @@
 /**
- * Difflog + AutoPR License Validation Worker
+ * Difflog + AutoPR + Fragile License Validation Worker
  *
  * Routes:
  *   POST /validate          — validate a Difflog license key + GitHub username pair
  *   POST /validate-autopr   — validate an AutoPR license key + repo pair
- *   POST /webhook/stripe    — handle Stripe subscription events (Difflog + AutoPR)
+ *   POST /validate-fragile  — validate a Fragile license key + repo pair
+ *   POST /webhook/stripe    — handle Stripe subscription events (all products)
  *   POST /demo              — generate a changelog from a public GitHub repo
  *   GET  /health            — liveness check
  *
  * KV schema (binding: LICENSES):
- *   key:   license_key          (e.g. "difflog_abc123...")     — Difflog license
- *   key:   autopr_license_{key} (e.g. "autopr_license_abc123") — AutoPR license
+ *   key:   license_key              (e.g. "difflog_abc123...")        — Difflog license
+ *   key:   autopr_license_{key}     (e.g. "autopr_license_abc123")    — AutoPR license
+ *   key:   fragile_license_{key}    (e.g. "fragile_license_abc123")   — Fragile license
  *   value: JSON string  { github_username, plan, stripe_customer_id, created_at }
  *
  *   key:   demo_ratelimit_{ip}
@@ -22,10 +24,12 @@
  */
 
 // --- Stripe price IDs (live) --------------------------------------------------
-const AUTOPR_INDIE_PRICE_ID   = 'price_1TCX6u0p242H3IUdhCRoCtWo';
-const AUTOPR_TEAMS_PRICE_ID   = 'price_1TCX6v0p242H3IUdM0pSptgu';
-const DIFFLOG_INDIE_PRICE_ID  = 'price_1TCT6H0p242H3IUdyyGsOEpf';
-const DIFFLOG_TEAMS_PRICE_ID  = 'price_1TCT6I0p242H3IUd5og0nTlm';
+const AUTOPR_INDIE_PRICE_ID    = 'price_1TCX6u0p242H3IUdhCRoCtWo';
+const AUTOPR_TEAMS_PRICE_ID    = 'price_1TCX6v0p242H3IUdM0pSptgu';
+const DIFFLOG_INDIE_PRICE_ID   = 'price_1TCT6H0p242H3IUdyyGsOEpf';
+const DIFFLOG_TEAMS_PRICE_ID   = 'price_1TCT6I0p242H3IUd5og0nTlm';
+const FRAGILE_INDIE_PRICE_ID   = 'price_1TCoMB0p242H3IUdijRUUjYp';
+const FRAGILE_TEAMS_PRICE_ID   = 'price_1TCoMB0p242H3IUdTFsGBz0m';
 
 // --- Helpers ------------------------------------------------------------------
 
@@ -111,20 +115,20 @@ function corsHeaders(origin) {
  * @param {string} plan        - 'indie' | 'teams'
  * @param {object} env         - Worker environment bindings
  */
-async function sendLicenseKeyEmail(email, licenseKey, plan, env, isAutopr = false) {
+async function sendLicenseKeyEmail(email, licenseKey, plan, env, isAutopr = false, isFragile = false) {
   if (!env.RESEND_API_KEY) {
     console.warn('RESEND_API_KEY not set — skipping license key email');
     return;
   }
 
   const planLabel = plan === 'teams' ? 'Teams' : 'Indie';
-  const productName = isAutopr ? 'AutoPR' : 'Difflog';
-  const secretName = isAutopr ? 'AUTOPR_LICENSE_KEY' : 'DIFFLOG_LICENSE_KEY';
-  const actionRef = isAutopr ? 'patchwork-eng/autopr@v1' : 'patchwork-eng/difflog@v1';
-  const siteUrl = isAutopr ? 'https://autopr.dev' : 'https://difflog.io';
-  const fromEmail = isAutopr ? 'AutoPR <hello@difflog.io>' : 'Difflog <hello@difflog.io>';
-  const accentColor = isAutopr ? '#388bfd' : '#1a7f37';
-  const openaiKeyName = isAutopr ? 'OPENAI_KEY' : 'OPENAI_API_KEY';
+  const productName = isFragile ? 'Fragile' : (isAutopr ? 'AutoPR' : 'Difflog');
+  const secretName = isFragile ? 'FRAGILE_LICENSE_KEY' : (isAutopr ? 'AUTOPR_LICENSE_KEY' : 'DIFFLOG_LICENSE_KEY');
+  const actionRef = isFragile ? 'patchwork-eng/fragile@v1' : (isAutopr ? 'patchwork-eng/autopr@v1' : 'patchwork-eng/difflog@v1');
+  const siteUrl = isFragile ? 'https://usefragile.dev' : (isAutopr ? 'https://autopr.dev' : 'https://difflog.io');
+  const fromEmail = isFragile ? 'Fragile <autopr@difflog.io>' : (isAutopr ? 'AutoPR <autopr@difflog.io>' : 'Difflog <hello@difflog.io>');
+  const accentColor = isFragile ? '#f0883e' : (isAutopr ? '#388bfd' : '#1a7f37');
+  const openaiKeyName = isFragile ? 'OPENAI_KEY' : (isAutopr ? 'OPENAI_KEY' : 'OPENAI_API_KEY');
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; color: #24292f;">
@@ -394,18 +398,33 @@ async function handleStripeWebhook(request, env, ctx) {
       console.log(`checkout.session.completed: session=${session.id} priceId=${priceId}`);
 
       // --- Determine plan label from price ID ---
-      const isAutoprIndie  = priceId === AUTOPR_INDIE_PRICE_ID;
-      const isAutoprTeams  = priceId === AUTOPR_TEAMS_PRICE_ID;
-      const isDifflogIndie = priceId === DIFFLOG_INDIE_PRICE_ID;
-      const isDifflogTeams = priceId === DIFFLOG_TEAMS_PRICE_ID;
-      const isAutopr = isAutoprIndie || isAutoprTeams ||
-        (session.metadata && session.metadata.product_type === 'autopr');
-      const plan = (isAutoprTeams || isDifflogTeams) ? 'teams' : 'indie';
+      const isAutoprIndie   = priceId === AUTOPR_INDIE_PRICE_ID;
+      const isAutoprTeams   = priceId === AUTOPR_TEAMS_PRICE_ID;
+      const isDifflogIndie  = priceId === DIFFLOG_INDIE_PRICE_ID;
+      const isDifflogTeams  = priceId === DIFFLOG_TEAMS_PRICE_ID;
+      const isFragileIndie  = priceId === FRAGILE_INDIE_PRICE_ID;
+      const isFragileTeams  = priceId === FRAGILE_TEAMS_PRICE_ID;
+      const isAutopr  = isAutoprIndie  || isAutoprTeams  || (session.metadata && session.metadata.product_type === 'autopr');
+      const isFragile = isFragileIndie || isFragileTeams || (session.metadata && session.metadata.product_type === 'fragile');
+      const plan = (isAutoprTeams || isDifflogTeams || isFragileTeams) ? 'teams' : 'indie';
 
       // --- Generate license key and store in KV ---
       let licenseKey, kvKey, product;
 
-      if (isAutopr) {
+      if (isFragile) {
+        const rawKey = generateLicenseKey('fragile');
+        kvKey = `fragile_license_${rawKey.replace('fragile_', '')}`;
+        licenseKey = rawKey;
+        product = 'fragile';
+        const entry = {
+          plan,
+          stripe_customer_id: stripeCustomerId,
+          created_at: new Date().toISOString(),
+          email: customerEmail || null,
+        };
+        await env.LICENSES.put(kvKey, JSON.stringify(entry));
+        console.log(`Fragile license created: ${licenseKey} (kv: ${kvKey})`);
+      } else if (isAutopr) {
         const rawKey = generateLicenseKey('autopr');
         kvKey = `autopr_license_${rawKey.replace('autopr_', '')}`;
         licenseKey = rawKey;
@@ -437,7 +456,7 @@ async function handleStripeWebhook(request, env, ctx) {
 
       // --- Respond to Stripe immediately, then send email in background ---
       if (customerEmail) {
-        const emailPromise = sendLicenseKeyEmail(customerEmail, licenseKey, plan, env, isAutopr);
+        const emailPromise = sendLicenseKeyEmail(customerEmail, licenseKey, plan, env, isAutopr, isFragile);
         if (ctx && typeof ctx.waitUntil === 'function') {
           ctx.waitUntil(emailPromise); // non-blocking in production
         } else {
@@ -490,6 +509,60 @@ async function handleStripeWebhook(request, env, ctx) {
     console.error('Webhook handler error:', err);
     return jsonResponse({ error: 'Internal error processing webhook.' }, 500);
   }
+}
+
+/** POST /validate-fragile */
+async function handleValidateFragile(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return jsonResponse({ valid: false, message: 'Invalid JSON body.' }, 400);
+  }
+
+  const { license_key, repo } = body;
+
+  if (!license_key || !repo) {
+    return jsonResponse({
+      valid: false,
+      message: 'Missing required fields: license_key and repo.',
+    }, 400);
+  }
+
+  // Strip "fragile_" prefix if present — keys stored as "fragile_license_{rest}"
+  const strippedKey = license_key.startsWith('fragile_') ? license_key.slice('fragile_'.length) : license_key;
+  const kvKey = `fragile_license_${strippedKey}`;
+  let entry;
+  try {
+    const raw = await env.LICENSES.get(kvKey);
+    if (!raw) {
+      return jsonResponse({
+        valid: false,
+        message: 'Invalid license key. Get one at https://usefragile.dev',
+      });
+    }
+    entry = JSON.parse(raw);
+  } catch (err) {
+    console.error('KV lookup error (fragile):', err);
+    return jsonResponse({ valid: false, message: 'License validation service error.' }, 500);
+  }
+
+  // Log usage
+  try {
+    const usage = Array.isArray(entry.usage) ? entry.usage : [];
+    usage.push({ timestamp: Date.now(), repo });
+    if (usage.length > 100) usage.splice(0, usage.length - 100);
+    entry.usage = usage;
+    await env.LICENSES.put(kvKey, JSON.stringify(entry));
+  } catch (err) {
+    console.error('Fragile usage logging error:', err);
+  }
+
+  return jsonResponse({
+    valid: true,
+    plan: entry.plan || 'indie',
+    message: 'License valid.',
+  });
 }
 
 /** GET /health */
@@ -700,6 +773,10 @@ export default {
 
     if (pathname === '/validate-autopr' && method === 'POST') {
       return handleValidateAutopr(request, env);
+    }
+
+    if (pathname === '/validate-fragile' && method === 'POST') {
+      return handleValidateFragile(request, env);
     }
 
     if (pathname === '/webhook/stripe' && method === 'POST') {
