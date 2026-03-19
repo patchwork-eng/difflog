@@ -191,7 +191,10 @@ async function handleValidateAutopr(request, env) {
   }
 
   // KV lookup — AutoPR uses "autopr_license_" prefix namespace
-  const kvKey = `autopr_license_${license_key}`;
+  // Strip the "autopr_" prefix if present (users receive keys like "autopr_abc123",
+  // but they are stored as "autopr_license_abc123" — not "autopr_license_autopr_abc123").
+  const strippedKey = license_key.startsWith('autopr_') ? license_key.slice('autopr_'.length) : license_key;
+  const kvKey = `autopr_license_${strippedKey}`;
   let entry;
   try {
     const raw = await env.LICENSES.get(kvKey);
