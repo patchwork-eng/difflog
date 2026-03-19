@@ -1,14 +1,16 @@
 /**
- * Difflog License Validation Worker
+ * Difflog + AutoPR License Validation Worker
  *
  * Routes:
- *   POST /validate          — validate a license key + GitHub username pair
- *   POST /webhook/stripe    — handle Stripe subscription events
+ *   POST /validate          — validate a Difflog license key + GitHub username pair
+ *   POST /validate-autopr   — validate an AutoPR license key + repo pair
+ *   POST /webhook/stripe    — handle Stripe subscription events (Difflog + AutoPR)
  *   POST /demo              — generate a changelog from a public GitHub repo
  *   GET  /health            — liveness check
  *
  * KV schema (binding: LICENSES):
- *   key:   license_key  (e.g. "difflog_abc123...")
+ *   key:   license_key          (e.g. "difflog_abc123...")     — Difflog license
+ *   key:   autopr_license_{key} (e.g. "autopr_license_abc123") — AutoPR license
  *   value: JSON string  { github_username, plan, stripe_customer_id, created_at }
  *
  *   key:   demo_ratelimit_{ip}
@@ -19,14 +21,18 @@
  *   OPENAI_API_KEY          — for the /demo endpoint
  */
 
+// --- AutoPR Stripe price IDs (live) ------------------------------------------
+const AUTOPR_INDIE_PRICE_ID  = 'price_1TCX6u0p242H3IUdhCRoCtWo';
+const AUTOPR_TEAMS_PRICE_ID  = 'price_1TCX6v0p242H3IUdM0pSptgu';
+
 // --- Helpers ------------------------------------------------------------------
 
-/** Generate a new license key: difflog_ + 32 random hex chars */
-function generateLicenseKey() {
+/** Generate a new license key: {prefix}_ + 32 random hex chars */
+function generateLicenseKey(prefix = 'difflog') {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-  return `difflog_${hex}`;
+  return `${prefix}_${hex}`;
 }
 
 /** Verify a Stripe webhook signature using the Web Crypto API */
@@ -103,34 +109,42 @@ function corsHeaders(origin) {
  * @param {string} plan        - 'indie' | 'teams'
  * @param {object} env         - Worker environment bindings
  */
-async function sendLicenseKeyEmail(email, licenseKey, plan, env) {
+async function sendLicenseKeyEmail(email, licenseKey, plan, env, isAutopr = false) {
   if (!env.RESEND_API_KEY) {
     console.warn('RESEND_API_KEY not set — skipping license key email');
     return;
   }
 
   const planLabel = plan === 'teams' ? 'Teams' : 'Indie';
+  const productName = isAutopr ? 'AutoPR' : 'Difflog';
+  const secretName = isAutopr ? 'AUTOPR_LICENSE_KEY' : 'DIFFLOG_LICENSE_KEY';
+  const actionRef = isAutopr ? 'patchwork-eng/autopr@v1' : 'patchwork-eng/difflog@v1';
+  const siteUrl = isAutopr ? 'https://autopr.dev' : 'https://difflog.io';
+  const fromEmail = isAutopr ? 'AutoPR <hello@difflog.io>' : 'Difflog <hello@difflog.io>';
+  const accentColor = isAutopr ? '#388bfd' : '#1a7f37';
+  const openaiKeyName = isAutopr ? 'OPENAI_KEY' : 'OPENAI_API_KEY';
+
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; color: #24292f;">
-      <h2 style="color: #1a7f37;">Your Difflog license key</h2>
-      <p>Thanks for subscribing to Difflog <strong>${planLabel}</strong>.</p>
+      <h2 style="color: ${accentColor};">Your ${productName} license key</h2>
+      <p>Thanks for subscribing to ${productName} <strong>${planLabel}</strong>.</p>
       <p>Here's your license key:</p>
       <pre style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; font-size: 14px; word-break: break-all;">${licenseKey}</pre>
       <h3>Add it to GitHub Secrets</h3>
       <ol>
         <li>Go to your repo → <strong>Settings → Secrets and variables → Actions</strong></li>
         <li>Click <strong>New repository secret</strong></li>
-        <li>Name: <code>DIFFLOG_LICENSE_KEY</code></li>
+        <li>Name: <code>${secretName}</code></li>
         <li>Value: paste the key above</li>
       </ol>
       <p>Then add it to your workflow:</p>
-      <pre style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; font-size: 13px;">- uses: patchwork-eng/difflog@v1
+      <pre style="background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 16px; font-size: 13px;">- uses: ${actionRef}
   with:
-    openai_key: \${{ secrets.OPENAI_API_KEY }}
-    license_key: \${{ secrets.DIFFLOG_LICENSE_KEY }}</pre>
+    openai_key: \${{ secrets.${openaiKeyName} }}
+    license_key: \${{ secrets.${secretName} }}</pre>
       <p>Questions? Reply to this email or reach us at <a href="mailto:hello@difflog.io">hello@difflog.io</a>.</p>
       <hr style="border: none; border-top: 1px solid #d0d7de; margin: 24px 0;">
-      <p style="font-size: 12px; color: #57606a;">Difflog · <a href="https://difflog.io">difflog.io</a></p>
+      <p style="font-size: 12px; color: #57606a;">${productName} by Patchwork · <a href="${siteUrl}">${siteUrl.replace('https://', '')}</a></p>
     </div>
   `;
 
@@ -141,22 +155,80 @@ async function sendLicenseKeyEmail(email, licenseKey, plan, env) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Difflog <hello@difflog.io>',
+      from: fromEmail,
       to: [email],
-      subject: `Your Difflog ${planLabel} license key`,
+      subject: `Your ${productName} ${planLabel} license key`,
       html,
     }),
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    console.error('Resend error:', res.status, body);
+    const errBody = await res.text();
+    console.error('Resend error:', res.status, errBody);
   } else {
-    console.log(`License key email sent to ${email}`);
+    console.log(`${productName} license key email sent to ${email}`);
   }
 }
 
 // --- Route handlers -----------------------------------------------------------
+
+/** POST /validate-autopr */
+async function handleValidateAutopr(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return jsonResponse({ valid: false, message: 'Invalid JSON body.' }, 400);
+  }
+
+  const { license_key, repo } = body;
+
+  if (!license_key || !repo) {
+    return jsonResponse({
+      valid: false,
+      message: 'Missing required fields: license_key and repo.',
+    }, 400);
+  }
+
+  // KV lookup — AutoPR uses "autopr_license_" prefix namespace
+  const kvKey = `autopr_license_${license_key}`;
+  let entry;
+  try {
+    const raw = await env.LICENSES.get(kvKey);
+    if (!raw) {
+      return jsonResponse({
+        valid: false,
+        message: 'Invalid license key. Get one at https://autopr.dev',
+      });
+    }
+    entry = JSON.parse(raw);
+  } catch (err) {
+    console.error('KV lookup error (autopr):', err);
+    return jsonResponse({ valid: false, message: 'License validation service error.' }, 500);
+  }
+
+  // Log usage to KV
+  try {
+    const usage = Array.isArray(entry.usage) ? entry.usage : [];
+    usage.push({
+      timestamp: Date.now(),
+      repo,
+    });
+    if (usage.length > 100) {
+      usage.splice(0, usage.length - 100);
+    }
+    entry.usage = usage;
+    await env.LICENSES.put(kvKey, JSON.stringify(entry));
+  } catch (err) {
+    console.error('AutoPR usage logging error:', err);
+  }
+
+  return jsonResponse({
+    valid: true,
+    plan: entry.plan || 'indie',
+    message: 'License valid.',
+  });
+}
 
 /** POST /validate */
 async function handleValidate(request, env) {
@@ -264,7 +336,40 @@ async function handleStripeWebhook(request, env) {
       const githubUsername = session.metadata && session.metadata.github_username;
       const plan = (session.metadata && session.metadata.plan) || 'indie';
       const stripeCustomerId = session.customer;
+      const customerEmail = session.customer_details && session.customer_details.email;
 
+      // Determine if this is an AutoPR purchase by checking the price ID
+      const lineItems = session.line_items;
+      let priceId = session.metadata && session.metadata.price_id;
+
+      // Check if the purchased price is an AutoPR price
+      const isAutopr = [AUTOPR_INDIE_PRICE_ID, AUTOPR_TEAMS_PRICE_ID].includes(priceId) ||
+        (session.metadata && session.metadata.product_type === 'autopr');
+
+      if (isAutopr) {
+        // AutoPR purchase — generate autopr_ prefixed key, store under autopr_license_{key}
+        const rawKey = generateLicenseKey('autopr');
+        const kvKey = `autopr_license_${rawKey.replace('autopr_', '')}`;
+        const entry = {
+          plan,
+          stripe_customer_id: stripeCustomerId,
+          created_at: new Date().toISOString(),
+        };
+        if (githubUsername) entry.github_username = githubUsername;
+
+        await env.LICENSES.put(kvKey, JSON.stringify(entry));
+        console.log(`AutoPR license created: ${rawKey} (kv: ${kvKey})`);
+
+        if (customerEmail) {
+          await sendLicenseKeyEmail(customerEmail, rawKey, plan, env, true);
+        } else {
+          console.warn('checkout.session.completed (autopr): no customer email found, skipping email');
+        }
+
+        return jsonResponse({ success: true, license_key: rawKey, product: 'autopr' });
+      }
+
+      // Difflog purchase (default)
       if (!githubUsername) {
         console.error('checkout.session.completed: missing github_username in metadata');
         return jsonResponse({ error: 'Missing github_username in session metadata.' }, 400);
@@ -280,17 +385,16 @@ async function handleStripeWebhook(request, env) {
 
       await env.LICENSES.put(licenseKey, JSON.stringify(entry));
 
-      console.log(`License created for ${githubUsername}: ${licenseKey}`);
+      console.log(`Difflog license created for ${githubUsername}: ${licenseKey}`);
 
       // Email the license key to the customer via Resend
-      const customerEmail = session.customer_details && session.customer_details.email;
       if (customerEmail) {
-        await sendLicenseKeyEmail(customerEmail, licenseKey, plan, env);
+        await sendLicenseKeyEmail(customerEmail, licenseKey, plan, env, false);
       } else {
         console.warn('checkout.session.completed: no customer email found, skipping license key email');
       }
 
-      return jsonResponse({ success: true, license_key: licenseKey });
+      return jsonResponse({ success: true, license_key: licenseKey, product: 'difflog' });
 
     } else if (eventType === 'customer.subscription.deleted') {
       const subscription = event.data.object;
@@ -402,7 +506,7 @@ async function handleDemo(request, env) {
   try {
     const ghRes = await fetch(
       `https://api.github.com/repos/${safeOwner}/${safeRepo}/commits?per_page=20`,
-      { headers: { 'User-Agent': 'difflog-demo/1.0' } }
+      { headers: { 'User-Agent': 'difflog-demo/1.0', ...(env.GITHUB_TOKEN ? { 'Authorization': `token ${env.GITHUB_TOKEN}` } : {}) } }
     );
 
     if (ghRes.status === 404) {
@@ -539,6 +643,10 @@ export default {
 
     if (pathname === '/validate' && method === 'POST') {
       return handleValidate(request, env);
+    }
+
+    if (pathname === '/validate-autopr' && method === 'POST') {
+      return handleValidateAutopr(request, env);
     }
 
     if (pathname === '/webhook/stripe' && method === 'POST') {
