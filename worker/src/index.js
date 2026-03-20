@@ -126,7 +126,7 @@ async function sendLicenseKeyEmail(email, licenseKey, plan, env, isAutopr = fals
   const secretName = isFragile ? 'FRAGILE_LICENSE_KEY' : (isAutopr ? 'AUTOPR_LICENSE_KEY' : 'DIFFLOG_LICENSE_KEY');
   const actionRef = isFragile ? 'patchwork-eng/fragile@v1' : (isAutopr ? 'patchwork-eng/autopr@v1' : 'patchwork-eng/difflog@v1');
   const siteUrl = isFragile ? 'https://usefragile.dev' : (isAutopr ? 'https://autopr.dev' : 'https://difflog.io');
-  const fromEmail = isFragile ? 'Fragile <autopr@difflog.io>' : (isAutopr ? 'AutoPR <autopr@difflog.io>' : 'Difflog <hello@difflog.io>');
+  const fromEmail = isFragile ? 'Fragile <fragile@difflog.io>' : (isAutopr ? 'AutoPR <autopr@difflog.io>' : 'Difflog <hello@difflog.io>');
   const accentColor = isFragile ? '#f0883e' : (isAutopr ? '#388bfd' : '#1a7f37');
   const openaiKeyName = isFragile ? 'OPENAI_KEY' : (isAutopr ? 'OPENAI_KEY' : 'OPENAI_API_KEY');
 
